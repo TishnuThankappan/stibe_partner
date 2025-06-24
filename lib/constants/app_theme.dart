@@ -294,7 +294,25 @@ class AppSizes {
   static const double spacingXL = 32.0;
 }
 
+// Environment configuration
+enum Environment { development, production }
+
+class AppConfig {
+  static const Environment currentEnvironment = Environment.development;  static String get baseUrl {
+    switch (currentEnvironment) {
+      case Environment.development:
+        return 'http://192.168.41.23:5074/api';  // Using your network IP for cross-device access
+      case Environment.production:
+        return 'http://192.168.41.23:5074/api';  // Update with actual production URL
+    }
+  }
+  
+  static bool get isDevelopment => currentEnvironment == Environment.development;
+  static bool get isProduction => currentEnvironment == Environment.production;
+}
+
 class AppConstants {
   static const String appName = 'Stibe Partner';
-  static const String baseUrl = 'https://api.stibe.com/partner';
+  // Use AppConfig.baseUrl instead of hardcoded value
+  static String get baseUrl => AppConfig.baseUrl;
 }

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 
@@ -11,7 +13,6 @@ class ApiService {
   factory ApiService() {
     return _instance;
   }
-
   ApiService._internal() {
     _dio = Dio(
       BaseOptions(
@@ -24,6 +25,14 @@ class ApiService {
         },
       ),
     );
+
+    // For development: Skip certificate verification for localhost
+    if (AppConfig.isDevelopment) {
+      (_dio.httpClientAdapter as DefaultHttpClientAdapter).onHttpClientCreate = (HttpClient client) {
+        client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+        return client;
+      };
+    }
 
     // Add interceptors
     _dio.interceptors.add(InterceptorsWrapper(
@@ -47,30 +56,60 @@ class ApiService {
       },
     ));
   }
-
   // Generic GET request
   Future<dynamic> get(String endpoint, {Map<String, dynamic>? queryParams}) async {
     try {
+      print('🌐 API GET Request');
+      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+      if (queryParams != null) {
+        print('📤 Query Params: $queryParams');
+      }
+      
       final response = await _dio.get(
         endpoint,
         queryParameters: queryParams,
       );
+      
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Data: ${response.data}');
+      
       return response.data;
     } on DioError catch (e) {
+      print('❌ API Error:');
+      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+      print('💥 Error Type: ${e.type}');
+      print('💥 Error Message: ${e.message}');
+      print('💥 Response: ${e.response?.data}');
+      print('💥 Status Code: ${e.response?.statusCode}');
+      
       _handleError(e);
       rethrow;
     }
   }
-
   // Generic POST request
   Future<dynamic> post(String endpoint, {dynamic data}) async {
     try {
+      print('🌐 API POST Request');
+      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+      print('📤 Data: $data');
+      
       final response = await _dio.post(
         endpoint,
         data: data,
       );
+      
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Data: ${response.data}');
+      
       return response.data;
     } on DioError catch (e) {
+      print('❌ API Error:');
+      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+      print('💥 Error Type: ${e.type}');
+      print('💥 Error Message: ${e.message}');
+      print('💥 Response: ${e.response?.data}');
+      print('💥 Status Code: ${e.response?.statusCode}');
+      
       _handleError(e);
       rethrow;
     }

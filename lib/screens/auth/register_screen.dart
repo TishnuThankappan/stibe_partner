@@ -7,7 +7,7 @@ import 'package:stibe_partner/widgets/custom_text_field.dart';
 
 class RegisterScreen extends StatefulWidget {
   final VoidCallback onNavigateToLogin;
-  final VoidCallback onRegisterSuccess;
+  final Function(String?) onRegisterSuccess;
   
   const RegisterScreen({
     super.key,
@@ -36,9 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  Future<void> _register() async {
+  }  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
       if (!_acceptTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -52,15 +50,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
       
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
-      final success = await authProvider.register(
+      // Split full name into first and last name
+      final fullName = _fullNameController.text.trim();
+      final nameParts = fullName.split(' ');
+      final firstName = nameParts.first;
+      final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+      
+      final emailForVerification = await authProvider.register(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        fullName: _fullNameController.text.trim(),
+        firstName: firstName,
+        lastName: lastName,
         phoneNumber: _phoneController.text.trim(),
       );
       
-      if (success && mounted) {
-        widget.onRegisterSuccess();
+      if (mounted) {
+        widget.onRegisterSuccess(emailForVerification);
       }
     }
   }

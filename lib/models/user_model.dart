@@ -1,10 +1,12 @@
 class User {
-  final String id;
+  final int id;  // Changed to int to match .NET API
   final String email;
   final String phoneNumber;
-  final String fullName;
+  final String firstName;  // Separated firstName and lastName
+  final String lastName;
   final String? profileImage;
   final String role;
+  final bool isEmailVerified;  // Added to match .NET API
   final DateTime createdAt;
   final Business? business;
 
@@ -12,21 +14,28 @@ class User {
     required this.id,
     required this.email,
     required this.phoneNumber,
-    required this.fullName,
+    required this.firstName,
+    required this.lastName,
     this.profileImage,
     required this.role,
+    required this.isEmailVerified,
     required this.createdAt,
     this.business,
   });
+
+  // Helper getter for full name
+  String get fullName => '$firstName $lastName';
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'],
       email: json['email'],
       phoneNumber: json['phoneNumber'],
-      fullName: json['fullName'],
+      firstName: json['firstName'],
+      lastName: json['lastName'],
       profileImage: json['profileImage'],
       role: json['role'],
+      isEmailVerified: json['isEmailVerified'] ?? false,
       createdAt: DateTime.parse(json['createdAt']),
       business: json['business'] != null
           ? Business.fromJson(json['business'])
@@ -39,9 +48,11 @@ class User {
       'id': id,
       'email': email,
       'phoneNumber': phoneNumber,
-      'fullName': fullName,
+      'firstName': firstName,
+      'lastName': lastName,
       'profileImage': profileImage,
       'role': role,
+      'isEmailVerified': isEmailVerified,
       'createdAt': createdAt.toIso8601String(),
       'business': business?.toJson(),
     };

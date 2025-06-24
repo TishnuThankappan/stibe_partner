@@ -5,9 +5,8 @@ import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/providers/auth_provider.dart';
 import 'package:stibe_partner/providers/appointment_provider.dart';
 import 'package:stibe_partner/screens/auth/business_profile_setup_screen.dart';
-import 'package:stibe_partner/screens/auth/login_screen.dart';
+import 'package:stibe_partner/screens/auth/auth_wrapper_screen.dart';
 import 'package:stibe_partner/screens/auth/onboarding_screen.dart';
-import 'package:stibe_partner/screens/auth/register_screen.dart';
 import 'package:stibe_partner/screens/main_navigation_screen.dart';
 
 void main() async {
@@ -91,29 +90,11 @@ class AuthenticationWrapper extends StatelessWidget {
                 );
               },
             );
-          }
-        } else {
-          // User is not authenticated, show login screen
-          return LoginScreen(
-            onNavigateToRegister: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => RegisterScreen(
-                    onNavigateToLogin: () => Navigator.pop(context),
-                    onRegisterSuccess: () {
-                      // After registration, show onboarding
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => const OnboardingScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              );
-            },
-            onLoginSuccess: () {
-              // Check if user has business profile
+          }        } else {
+          // User is not authenticated, show auth wrapper
+          return AuthWrapperScreen(
+            onAuthSuccess: () {
+              // Check if user has business profile after authentication
               final hasBusiness = Provider.of<AuthProvider>(context, listen: false).user?.business != null;
               
               if (hasBusiness) {

@@ -1,6 +1,5 @@
 import 'package:stibe_partner/api/api_service.dart';
 import 'package:stibe_partner/models/user_model.dart';
-import 'package:stibe_partner/constants/app_theme.dart';
 
 class AuthService {
   final ApiService _apiService = ApiService();
@@ -34,36 +33,27 @@ class AuthService {
     }
 
     throw Exception('Registration failed');
-  }  // Login to partner account
+  }
+
+  // Login to partner account
   Future<User> login({
     required String email,
     required String password,
   }) async {
-    print('🔐 LOGIN ATTEMPT');
-    print('📧 Email: $email');
-    print('🔗 URL: ${AppConstants.baseUrl}/auth/login');
-    
-    final loginData = {
+    final response = await _apiService.post('/auth/login', data: {
       'email': email,
       'password': password,
-    };
-    print('📤 Request Data: $loginData');
-    
-    final response = await _apiService.post('/auth/login', data: loginData);
-    
-    print('📥 Response: $response');
+    });
 
     // Save token (from .NET API response structure)
     if (response['data'] != null) {
       final data = response['data'];
-      print('✅ Login successful - Token received: ${data['token'] != null}');
       if (data['token'] != null) {
         await _apiService.setAuthToken(data['token']);
       }
       return User.fromJson(data['user'] ?? data);
     }
 
-    print('❌ Login failed - No data in response');
     throw Exception('Login failed');
   }
 
@@ -136,28 +126,6 @@ class AuthService {
       return user.id.toString();
     } catch (e) {
       return null;
-    }
-  }
-
-  // Check if email is verified
-  Future<bool> checkEmailVerification(String email) async {
-    try {
-      final response = await _apiService.get('/auth/check-verification?email=${Uri.encodeComponent(email)}');
-      return response['data']?['isEmailVerified'] ?? false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Resend verification email
-  Future<bool> resendVerificationEmail(String email) async {
-    try {
-      final response = await _apiService.post('/auth/resend-verification', data: {
-        'email': email,
-      });
-      return response['success'] ?? false;
-    } catch (e) {
-      return false;
     }
   }
 }

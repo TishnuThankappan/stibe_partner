@@ -21,8 +21,10 @@ class BusinessProfileSetupScreen extends StatefulWidget {
 
 class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _businessNameController = TextEditingController();
-  final _businessAddressController = TextEditingController();
+  final _businessNameController = TextEditingController();  final _businessAddressController = TextEditingController();
+  final _businessCityController = TextEditingController();
+  final _businessStateController = TextEditingController();
+  final _businessZipController = TextEditingController();
   final _businessDescriptionController = TextEditingController();
   final _businessPhoneController = TextEditingController();
   final _businessWebsiteController = TextEditingController();
@@ -44,21 +46,34 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
   ];
   
   int _currentStep = 0;
-  
-  @override
+    @override
   void dispose() {
     _businessNameController.dispose();
     _businessAddressController.dispose();
+    _businessCityController.dispose();
+    _businessStateController.dispose();
+    _businessZipController.dispose();
     _businessDescriptionController.dispose();
     _businessPhoneController.dispose();
     _businessWebsiteController.dispose();
     _latitudeController.dispose();
     _longitudeController.dispose();
     super.dispose();
-  }
-  
-  Future<void> _submitBusinessInfo() async {
+  }    Future<void> _submitBusinessInfo() async {
     if (_formKey.currentState!.validate()) {
+      print('📋 Form validation passed');
+      
+      if (_selectedCategories.isEmpty) {
+        print('⚠️ No service categories selected');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select at least one service category'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+      
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
       // Create location object
@@ -67,17 +82,28 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
         longitude: double.parse(_longitudeController.text),
       );
       
+      print('🚀 Submitting business info...');
+      
       final success = await authProvider.submitBusinessInfo(
         name: _businessNameController.text.trim(),
         address: _businessAddressController.text.trim(),
+        city: _businessCityController.text.trim(),
+        state: _businessStateController.text.trim(),
+        zipCode: _businessZipController.text.trim(),
         description: _businessDescriptionController.text.trim(),
         location: location,
         serviceCategories: _selectedCategories,
       );
       
       if (success && mounted) {
+        print('✅ Business setup completed successfully');
         widget.onSetupComplete();
+      } else {
+        print('❌ Business setup failed');
+        // Error is already displayed by the AuthProvider
       }
+    } else {
+      print('❌ Form validation failed');
     }
   }
 
@@ -94,9 +120,19 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
         child: Form(
           key: _formKey,
           child: Stepper(
-            currentStep: _currentStep,
-            onStepContinue: () {
+            currentStep: _currentStep,            onStepContinue: () {
               if (_currentStep < 2) {
+                // Validate current step before proceeding
+                if (_currentStep == 1 && _selectedCategories.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select at least one service category'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+                
                 setState(() {
                   _currentStep += 1;
                 });
@@ -161,8 +197,7 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
       ),
     );
   }
-  
-  Widget _buildBasicInfoStep() {
+    Widget _buildBasicInfoStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -183,17 +218,80 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
         const SizedBox(height: 16),
         
         CustomTextField(
-          label: 'Business Address',
-          hintText: 'Enter your business address',
+          label: 'Street Address',
+          hintText: 'Enter your street address',
           controller: _businessAddressController,
           validator: (value) {
             if (value == null || value.isEmpty) {
-              return 'Please enter your business address';
+              return 'Please enter your street address';
             }
             return null;
           },
           prefix: const Icon(Icons.location_on_outlined),
           required: true,
+        ),
+        
+        const SizedBox(height: 16),
+        
+        Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: CustomTextField(
+                label: 'City',
+                hintText: 'Enter city',
+                controller: _businessCityController,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter city';
+                  }
+                  return null;
+                },
+                prefix: const Icon(Icons.location_city),
+                required: true,
+              ),
+            ),
+            
+            const SizedBox(width: 12),
+            
+            Expanded(
+              child: CustomTextField(
+                label: 'State',
+                hintText: 'State',
+                controller: _businessStateController,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Required';
+                  }
+                  return null;
+                },
+                prefix: const Icon(Icons.map),
+                required: true,
+              ),
+            ),
+            
+            const SizedBox(width: 12),
+            
+            Expanded(
+              child: CustomTextField(
+                label: 'ZIP Code',
+                hintText: 'ZIP',
+                controller: _businessZipController,
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Required';
+                  }
+                  if (value.length < 5) {
+                    return 'Invalid ZIP';
+                  }
+                  return null;
+                },
+                prefix: const Icon(Icons.local_post_office),
+                required: true,
+              ),
+            ),
+          ],
         ),
         
         const SizedBox(height: 16),
@@ -374,16 +472,22 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
         ),
         
         const SizedBox(height: 16),
-        
-        OutlinedButton(
-          text: 'Get Current Location',
+          OutlinedButton(
+          text: 'Use Sample Location (Demo)',
           onPressed: () {
-            // Request current location
-            // For demo purposes, set some sample coordinates
+            // For demo purposes, set coordinates for New York City
             setState(() {
               _latitudeController.text = '40.7128';
               _longitudeController.text = '-74.0060';
             });
+            
+            // Show a message to explain this is demo functionality
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Demo location set to New York City. In a real app, this would use GPS.'),
+                backgroundColor: AppColors.primary,
+              ),
+            );
           },
           icon: Icons.my_location,
           width: double.infinity,
