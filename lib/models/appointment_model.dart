@@ -1,4 +1,3 @@
-import 'package:stibe_partner/models/user_model.dart';
 
 enum AppointmentStatus {
   pending,

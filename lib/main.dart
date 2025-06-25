@@ -6,6 +6,10 @@ import 'package:stibe_partner/providers/auth_provider.dart';
 import 'package:stibe_partner/providers/appointment_provider.dart';
 import 'package:stibe_partner/screens/auth/auth_wrapper_screen.dart';
 import 'package:stibe_partner/screens/main_navigation_screen.dart';
+import 'package:stibe_partner/screens/profile/edit_profile_screen.dart';
+import 'package:stibe_partner/screens/debug/image_url_debug_screen.dart';
+import 'package:stibe_partner/screens/salons/salons_screen.dart';
+import 'package:stibe_partner/screens/salons/add_salon_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +48,12 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         home: AuthenticationWrapper(),
+        routes: {
+          '/profile': (context) => const EditProfileScreen(),
+          '/debug/image-url': (context) => const ImageUrlDebugScreen(),
+          '/salons': (context) => const SalonsScreen(),
+          '/add-salon': (context) => const AddSalonScreen(),
+        },
       ),
     );
   }

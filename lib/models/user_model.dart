@@ -1,3 +1,5 @@
+import 'package:stibe_partner/utils/image_utils.dart';
+
 class User {
   final int id;  // Changed to int to match .NET API
   final String email;
@@ -27,13 +29,24 @@ class User {
   String get fullName => '$firstName $lastName';
 
   factory User.fromJson(Map<String, dynamic> json) {
+    // Debug output for profile image fields
+    print('🔍 User model parsing - profileImage: ${json['profileImage']}');
+    print('🔍 User model parsing - profilePictureUrl: ${json['profilePictureUrl']}');
+    
+    // Get the profile image URL and process it
+    String? profileImageUrl = json['profilePictureUrl'] ?? json['profileImage'];
+    if (profileImageUrl != null) {
+      profileImageUrl = ImageUtils.getFullImageUrl(profileImageUrl);
+      print('🔍 Processed profile image URL: $profileImageUrl');
+    }
+    
     return User(
       id: json['id'],
       email: json['email'],
       phoneNumber: json['phoneNumber'],
       firstName: json['firstName'],
       lastName: json['lastName'],
-      profileImage: json['profileImage'],
+      profileImage: profileImageUrl,
       role: json['role'],
       isEmailVerified: json['isEmailVerified'] ?? false,
       createdAt: DateTime.parse(json['createdAt']),
@@ -41,6 +54,14 @@ class User {
           ? Business.fromJson(json['business'])
           : null,
     );
+  }
+  
+  // Get a properly formatted profile image URL
+  String? get formattedProfileImage {
+    if (profileImage == null || profileImage!.isEmpty) {
+      return null;
+    }
+    return ImageUtils.getFullImageUrl(profileImage);
   }
 
   Map<String, dynamic> toJson() {
@@ -50,7 +71,7 @@ class User {
       'phoneNumber': phoneNumber,
       'firstName': firstName,
       'lastName': lastName,
-      'profileImage': profileImage,
+      'profilePictureUrl': profileImage, // Map to the correct field name for backend
       'role': role,
       'isEmailVerified': isEmailVerified,
       'createdAt': createdAt.toIso8601String(),

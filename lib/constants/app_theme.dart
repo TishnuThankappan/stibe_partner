@@ -298,13 +298,24 @@ class AppSizes {
 enum Environment { development, production }
 
 class AppConfig {
-  static const Environment currentEnvironment = Environment.development;  static String get baseUrl {
+  static const Environment currentEnvironment = Environment.production;
+  
+  static String get baseUrl {
     switch (currentEnvironment) {
       case Environment.development:
-        return 'http://192.168.1.90:5074/api';  // Using your network IP for cross-device access
+        return 'http://192.168.126.23:5074/api';  // Using localhost for local development
       case Environment.production:
-        return 'http://192.168.1.90:5074/api';  // Update with actual production URL
+        return 'http://192.168.126.23:5074/api';  // Production URL
     }
+  }
+  
+  // Add a method to get the server URL without the /api part
+  static String get serverUrl {
+    final apiUrl = baseUrl;
+    if (apiUrl.endsWith('/api')) {
+      return apiUrl.substring(0, apiUrl.length - 4);
+    }
+    return apiUrl;
   }
   
   static bool get isDevelopment => currentEnvironment == Environment.development;

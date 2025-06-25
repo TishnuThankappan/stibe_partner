@@ -9,8 +9,10 @@ class SalonDto {
   final String state;
   final String zipCode;
   final String phoneNumber;
+  final String email;
   final String openingTime;  // Keep as string for display
   final String closingTime;  // Keep as string for display
+  final String? businessHours; // JSON string of business hours
   final double? latitude;
   final double? longitude;
   final bool isActive;
@@ -27,8 +29,10 @@ class SalonDto {
     required this.state,
     required this.zipCode,
     required this.phoneNumber,
+    required this.email,
     required this.openingTime,
     required this.closingTime,
+    this.businessHours,
     this.latitude,
     this.longitude,
     required this.isActive,
@@ -47,8 +51,10 @@ class SalonDto {
       state: json['state'] ?? '',
       zipCode: json['zipCode'] ?? '',
       phoneNumber: json['phoneNumber'] ?? '',
+      email: json['email'] ?? '',
       openingTime: _formatTimeSpan(json['openingTime']),
       closingTime: _formatTimeSpan(json['closingTime']),
+      businessHours: json['businessHours'],
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
       isActive: json['isActive'] ?? true,
@@ -83,8 +89,10 @@ class SalonDto {
       'state': state,
       'zipCode': zipCode,
       'phoneNumber': phoneNumber,
+      'email': email,
       'openingTime': openingTime,
       'closingTime': closingTime,
+      'businessHours': businessHours,
       'latitude': latitude,
       'longitude': longitude,
       'isActive': isActive,
@@ -103,8 +111,10 @@ class CreateSalonRequest {
   final String state;
   final String zipCode;
   final String phoneNumber;
+  final String email;
   final String openingTime; // Format: "09:00:00"
   final String closingTime; // Format: "18:00:00"
+  final Map<String, Map<String, dynamic>>? businessHours;
   final double? currentLatitude;
   final double? currentLongitude;
   final bool useCurrentLocation;
@@ -117,26 +127,30 @@ class CreateSalonRequest {
     required this.state,
     required this.zipCode,
     required this.phoneNumber,
+    required this.email,
     this.openingTime = "09:00:00",
     this.closingTime = "18:00:00",
+    this.businessHours,
     this.currentLatitude,
     this.currentLongitude,
     this.useCurrentLocation = false,
   });
   Map<String, dynamic> toJson() {
     return {
-      'Name': name,  // PascalCase for .NET API
-      'Description': description,
-      'Address': address,
-      'City': city,
-      'State': state,
-      'ZipCode': zipCode,
-      'PhoneNumber': phoneNumber,
-      'OpeningTime': openingTime,
-      'ClosingTime': closingTime,
-      'CurrentLatitude': currentLatitude,
-      'CurrentLongitude': currentLongitude,
-      'UseCurrentLocation': useCurrentLocation,
+      'name': name,  // Use camelCase for the new JSON endpoint
+      'description': description,
+      'address': address,
+      'city': city,
+      'state': state,
+      'zipCode': zipCode,
+      'phoneNumber': phoneNumber,
+      'email': email,
+      'openingTime': openingTime,
+      'closingTime': closingTime,
+      'businessHours': businessHours,
+      'currentLatitude': currentLatitude,
+      'currentLongitude': currentLongitude,
+      'useCurrentLocation': useCurrentLocation,
     };
   }
 }
@@ -144,12 +158,12 @@ class CreateSalonRequest {
 class SalonService {
   final ApiService _apiService = ApiService();
 
-  // Create a new salon
+  // Create a new salon using the JSON endpoint
   Future<SalonDto> createSalon(CreateSalonRequest request) async {
     print('🏢 Creating salon with SalonService');
     print('📤 Request: ${request.toJson()}');
     
-    final response = await _apiService.post('/salon', data: request.toJson());
+    final response = await _apiService.post('/salon/create-json', data: request.toJson());
     
     print('📥 Salon creation response: $response');
     
@@ -170,6 +184,7 @@ class SalonService {
     
     throw Exception('Failed to get salon');
   }
+
   // Get current user's salons
   Future<List<SalonDto>> getMySalons() async {
     final response = await _apiService.get('/salon');

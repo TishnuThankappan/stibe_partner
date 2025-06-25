@@ -67,7 +67,7 @@ dependencies:
   fl_chart: ^0.66.2
   
   # Maps
-  google_maps_flutter: ^2.6.0
+  free_map: ^2.3.0
   geolocator: ^11.0.0
   
   # Firebase services
@@ -82,7 +82,7 @@ dependencies:
   path_provider: ^2.1.2
   
   # Forms and validation
-  form_validator: ^2.1.1  # Notifications
+  form_validator: ^2.1.1
   # flutter_local_notifications: ^13.0.0  # Commented out due to compatibility issues
 
 dev_dependencies:

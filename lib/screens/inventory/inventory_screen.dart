@@ -589,7 +589,7 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
                   ),
                 ],
               ),
-            )).toList(),
+            )),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

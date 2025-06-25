@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:stibe_partner/api/auth_service.dart';
 import 'package:stibe_partner/api/salon_service.dart';
@@ -177,10 +178,19 @@ class AuthProvider extends ChangeNotifier {
     _clearError();
     
     try {
+      final previousProfileImage = _user?.profileImage;
       _user = await _authService.getProfile();
+      
+      // Debug output to trace profile image changes
+      print('🔄 Profile refreshed:');
+      print('  - Previous profile image: $previousProfileImage');
+      print('  - New profile image: ${_user?.profileImage}');
+      print('  - Formatted profile image: ${_user?.formattedProfileImage}');
+      
       notifyListeners();
     } catch (e) {
       _setError(e.toString());
+      print('❌ Error refreshing profile: $e');
     } finally {
       _setLoading(false);
     }
@@ -225,6 +235,7 @@ class AuthProvider extends ChangeNotifier {
         state: state,
         zipCode: zipCode,
         phoneNumber: _user!.phoneNumber, // Use user's phone
+        email: _user!.email, // Add required email field
         openingTime: '09:00:00', // Default opening time in TimeSpan format
         closingTime: '18:00:00', // Default closing time in TimeSpan format
         currentLatitude: location.latitude,
@@ -299,6 +310,51 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       _setError(e.toString());
       return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // Update user profile
+  Future<bool> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String phoneNumber,
+    String? profileImage,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _user = await _authService.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+        phoneNumber: phoneNumber,
+        profileImage: profileImage,
+      );
+      
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  // Upload profile image
+  Future<String?> uploadProfileImage(File imageFile) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final imageUrl = await _authService.uploadProfileImage(imageFile);
+      notifyListeners();
+      return imageUrl;
+    } catch (e) {
+      _setError(e.toString());
+      return null;
     } finally {
       _setLoading(false);
     }

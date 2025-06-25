@@ -13,7 +13,7 @@ class LocationTestScreen extends StatefulWidget {
 
 class _LocationTestScreenState extends State<LocationTestScreen> {
   LocationResult? _lastResult;
-  List<LocationResult> _locationHistory = [];
+  final List<LocationResult> _locationHistory = [];
   bool _isLoading = false;
 
   @override

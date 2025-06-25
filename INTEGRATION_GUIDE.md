@@ -23,7 +23,7 @@ stibe_partner/
 ## Current Configuration
 
 ### Flutter App (Client)
-- **Base URL**: `http://192.168.43.126:5074/api`
+- **Base URL**: `http://localhost:5000/api` (Development)
 - **Authentication**: JWT Bearer tokens
 - **Storage**: Flutter Secure Storage for tokens
 - **HTTP Client**: Dio with interceptors
@@ -111,3 +111,42 @@ flutter run
 - `appsettings.json` - Production configuration
 - `appsettings.Development.json` - Development configuration
 - `Properties/launchSettings.json` - Launch profiles
+
+## Stibe .NET API Integration
+
+### New Services
+The following services have been added to integrate with the .NET API:
+
+1. `DotNetAuthService` (`lib/api/dotnet_auth_service.dart`)
+   - Handles authentication with the .NET backend
+   - Includes login, register, password reset, and token management
+
+2. `DotNetSalonService` (`lib/api/dotnet_salon_service.dart`)
+   - Manages salon operations
+   - Create, read, update, delete salon entities
+
+3. `DotNetStaffService` (`lib/api/dotnet_staff_service.dart`)
+   - Manages staff operations
+   - Add, remove, and update staff members
+   - Manage staff schedules
+
+4. `DotNetServiceManagementService` (`lib/api/dotnet_service_management_service.dart`)
+   - Manages salon services
+   - Add, remove, and update service offerings
+   - Assign services to staff members
+
+### Testing the Integration
+You can test the API integration using the built-in API Test Screen:
+1. Navigate to the Debug section in the app
+2. Open the "API Test" screen
+3. Click on "Test .NET API Connection" to verify connectivity
+4. Click on "Test .NET Login" to verify authentication
+
+### Running the API
+To run the .NET API locally:
+1. Open a terminal
+2. Navigate to the `stibe.api` directory
+3. Run `dotnet restore` to restore dependencies
+4. Run `dotnet run` to start the API
+
+Alternatively, use the `start_api.bat` file in the root directory.

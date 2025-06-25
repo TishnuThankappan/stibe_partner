@@ -1,7 +1,7 @@
 import 'package:stibe_partner/api/api_service.dart';
 import 'package:stibe_partner/models/user_model.dart';
 
-class AuthService {
+class DotNetAuthService {
   final ApiService _apiService = ApiService();
 
   // Register a new salon owner
@@ -23,8 +23,7 @@ class AuthService {
       'role': role,
     });
 
-    // Save token if available (from .NET API response structure)
-    if (response['data'] != null) {
+    if (response['successful'] == true && response['data'] != null) {
       final data = response['data'];
       if (data['token'] != null) {
         await _apiService.setAuthToken(data['token']);
@@ -32,7 +31,7 @@ class AuthService {
       return User.fromJson(data['user'] ?? data);
     }
 
-    throw Exception('Registration failed');
+    throw Exception(response['message'] ?? 'Registration failed');
   }
 
   // Login to partner account
@@ -45,8 +44,7 @@ class AuthService {
       'password': password,
     });
 
-    // Save token (from .NET API response structure)
-    if (response['data'] != null) {
+    if (response['successful'] == true && response['data'] != null) {
       final data = response['data'];
       if (data['token'] != null) {
         await _apiService.setAuthToken(data['token']);
@@ -54,14 +52,31 @@ class AuthService {
       return User.fromJson(data['user'] ?? data);
     }
 
-    throw Exception('Login failed');
+    throw Exception(response['message'] ?? 'Login failed');
+  }
+
+  // Login with Google
+  Future<User> googleSignIn({required String idToken}) async {
+    final response = await _apiService.post('/auth/google-sign-in', data: {
+      'idToken': idToken,
+    });
+
+    if (response['successful'] == true && response['data'] != null) {
+      final data = response['data'];
+      if (data['token'] != null) {
+        await _apiService.setAuthToken(data['token']);
+      }
+      return User.fromJson(data['user'] ?? data);
+    }
+
+    throw Exception(response['message'] ?? 'Google sign-in failed');
   }
 
   // Verify email
   Future<bool> verifyEmail({required String email, required String token}) async {
     try {
       final response = await _apiService.get('/auth/verify-email?email=$email&token=$token');
-      return response['success'] ?? false;
+      return response['successful'] ?? false;
     } catch (e) {
       return false;
     }
@@ -71,11 +86,11 @@ class AuthService {
   Future<User> getProfile() async {
     final response = await _apiService.get('/auth/me');
     
-    if (response['data'] != null) {
+    if (response['successful'] == true && response['data'] != null) {
       return User.fromJson(response['data']);
     }
     
-    throw Exception('Failed to get profile');
+    throw Exception(response['message'] ?? 'Failed to get profile');
   }
 
   // Forgot password
@@ -84,7 +99,27 @@ class AuthService {
       final response = await _apiService.post('/auth/forgot-password', data: {
         'email': email,
       });
-      return response['success'] ?? false;
+      return response['successful'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Reset password
+  Future<bool> resetPassword({
+    required String email,
+    required String token,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      final response = await _apiService.post('/auth/reset-password', data: {
+        'email': email,
+        'token': token,
+        'newPassword': newPassword,
+        'confirmPassword': confirmPassword,
+      });
+      return response['successful'] ?? false;
     } catch (e) {
       return false;
     }
@@ -94,15 +129,15 @@ class AuthService {
   Future<bool> changePassword({
     required String currentPassword,
     required String newPassword,
-    required String confirmNewPassword,
+    required String confirmPassword,
   }) async {
     try {
       final response = await _apiService.post('/auth/change-password', data: {
         'currentPassword': currentPassword,
         'newPassword': newPassword,
-        'confirmNewPassword': confirmNewPassword,
+        'confirmPassword': confirmPassword,
       });
-      return response['success'] ?? false;
+      return response['successful'] ?? false;
     } catch (e) {
       return false;
     }
@@ -110,27 +145,6 @@ class AuthService {
 
   // Logout
   Future<void> logout() async {
-    await _apiService.clearAuthToken(); 
-  }
-
-  // Check if user is logged in
-  Future<bool> isLoggedIn() async {
-    try {
-      // Use secure storage directly to get the token
-      final token = await _apiService.getStoredToken();
-      return token != null && token.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Get current user ID from token
-  Future<String?> getCurrentUserId() async {
-    try {
-      final user = await getProfile();
-      return user.id.toString();
-    } catch (e) {
-      return null;
-    }
+    await _apiService.clearAuthToken();
   }
 }
