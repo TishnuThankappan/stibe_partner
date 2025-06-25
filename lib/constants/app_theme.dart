@@ -301,9 +301,9 @@ class AppConfig {
   static const Environment currentEnvironment = Environment.development;  static String get baseUrl {
     switch (currentEnvironment) {
       case Environment.development:
-        return 'http://192.168.41.23:5074/api';  // Using your network IP for cross-device access
+        return 'http://192.168.43.126:5074/api';  // Using your network IP for cross-device access
       case Environment.production:
-        return 'http://192.168.41.23:5074/api';  // Update with actual production URL
+        return 'http://192.168.43.126:5074/api';  // Update with actual production URL
     }
   }
   

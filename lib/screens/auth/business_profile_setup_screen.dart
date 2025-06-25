@@ -6,6 +6,7 @@ import 'package:stibe_partner/providers/auth_provider.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/widgets/custom_button.dart';
 import 'package:stibe_partner/widgets/custom_text_field.dart';
+import 'package:stibe_partner/widgets/location_picker.dart';
 
 class BusinessProfileSetupScreen extends StatefulWidget {
   final VoidCallback onSetupComplete;
@@ -73,13 +74,39 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
         );
         return;
       }
+
+      // Validate location coordinates
+      if (_latitudeController.text.isEmpty || _longitudeController.text.isEmpty) {
+        print('⚠️ Location coordinates not provided');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please provide your business location'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      final latitude = double.tryParse(_latitudeController.text);
+      final longitude = double.tryParse(_longitudeController.text);
+      
+      if (latitude == null || longitude == null) {
+        print('⚠️ Invalid location coordinates');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid location coordinates'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
       
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
       // Create location object
       final location = Location(
-        latitude: double.parse(_latitudeController.text),
-        longitude: double.parse(_longitudeController.text),
+        latitude: latitude,
+        longitude: longitude,
       );
       
       print('🚀 Submitting business info...');
@@ -236,7 +263,7 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
         Row(
           children: [
             Expanded(
-              flex: 2,
+              flex: 3,
               child: CustomTextField(
                 label: 'City',
                 hintText: 'Enter city',
@@ -255,13 +282,14 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
             const SizedBox(width: 12),
             
             Expanded(
+              flex: 2,
               child: CustomTextField(
                 label: 'State',
-                hintText: 'State',
+                hintText: 'State/Province',
                 controller: _businessStateController,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Required';
+                    return 'Please enter state';
                   }
                   return null;
                 },
@@ -269,27 +297,40 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
                 required: true,
               ),
             ),
-            
-            const SizedBox(width: 12),
-            
+          ],
+        ),
+        
+        const SizedBox(height: 16),
+        
+        Row(
+          children: [
             Expanded(
+              flex: 2,
               child: CustomTextField(
-                label: 'ZIP Code',
-                hintText: 'ZIP',
+                label: 'ZIP/Postal Code',
+                hintText: 'Enter ZIP code',
                 controller: _businessZipController,
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Required';
+                    return 'Please enter ZIP code';
                   }
-                  if (value.length < 5) {
-                    return 'Invalid ZIP';
+                  if (value.length < 4) {
+                    return 'Invalid ZIP code';
                   }
                   return null;
                 },
                 prefix: const Icon(Icons.local_post_office),
                 required: true,
               ),
+            ),
+            
+            const SizedBox(width: 12),
+            
+            // Empty space to balance the layout
+            const Expanded(
+              flex: 3,
+              child: SizedBox(),
             ),
           ],
         ),
@@ -388,111 +429,18 @@ class _BusinessProfileSetupScreenState extends State<BusinessProfileSetupScreen>
   }
   
   Widget _buildLocationStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Enter your business location coordinates:',
-          style: AppTextStyles.subtitle,
-        ),
-        
-        const SizedBox(height: 8),
-        
-        Text(
-          'These coordinates will be used to show your business on the map.',
-          style: AppTextStyles.caption,
-        ),
-        
-        const SizedBox(height: 16),
-        
-        Row(
-          children: [
-            Expanded(
-              child: CustomTextField(
-                label: 'Latitude',
-                hintText: 'e.g. 37.7749',
-                controller: _latitudeController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Required';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Invalid number';
-                  }
-                  return null;
-                },
-                prefix: const Icon(Icons.my_location),
-                required: true,
-              ),
-            ),
-            
-            const SizedBox(width: 16),
-            
-            Expanded(
-              child: CustomTextField(
-                label: 'Longitude',
-                hintText: 'e.g. -122.4194',
-                controller: _longitudeController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Required';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Invalid number';
-                  }
-                  return null;
-                },
-                prefix: const Icon(Icons.my_location),
-                required: true,
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 16),
-        
-        Container(
-          height: 200,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.grey[300],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Text(
-              'Map Preview',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 16),
-          OutlinedButton(
-          text: 'Use Sample Location (Demo)',
-          onPressed: () {
-            // For demo purposes, set coordinates for New York City
-            setState(() {
-              _latitudeController.text = '40.7128';
-              _longitudeController.text = '-74.0060';
-            });
-            
-            // Show a message to explain this is demo functionality
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Demo location set to New York City. In a real app, this would use GPS.'),
-                backgroundColor: AppColors.primary,
-              ),
-            );
-          },
-          icon: Icons.my_location,
-          width: double.infinity,
-        ),
-      ],
+    return LocationPicker(
+      initialLatitude: _latitudeController.text.isNotEmpty ? double.tryParse(_latitudeController.text) : null,
+      initialLongitude: _longitudeController.text.isNotEmpty ? double.tryParse(_longitudeController.text) : null,
+      title: 'Business Location',
+      subtitle: 'Get your current location or use demo coordinates for testing.',
+      onLocationSelected: (latitude, longitude, isDemo) {
+        setState(() {
+          _latitudeController.text = latitude.toString();
+          _longitudeController.text = longitude.toString();
+        });
+      },
+      showDemoOption: true,
     );
   }
 }

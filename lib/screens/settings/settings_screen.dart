@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
+import 'package:stibe_partner/screens/location_test_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -41,6 +42,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildBusinessSection(),
             const SizedBox(height: 24),
             _buildSupportSection(),
+            const SizedBox(height: 24),
+            _buildDeveloperSection(),
             const SizedBox(height: 24),
             _buildLogoutButton(),
             const SizedBox(height: 32),
@@ -374,6 +377,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildDeveloperSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              'Developer Options',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 0,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.location_on, color: AppColors.primary),
+                  title: const Text('Location Service Test'),
+                  subtitle: const Text('Test GPS location functionality'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LocationTestScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  leading: const Icon(Icons.api, color: AppColors.primary),
+                  title: const Text('API Configuration'),
+                  subtitle: const Text('View API endpoint and settings'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    _showApiConfigDialog();
+                  },
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  leading: const Icon(Icons.bug_report, color: AppColors.primary),
+                  title: const Text('Debug Information'),
+                  subtitle: const Text('View app debug information'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    _showDebugInfoDialog();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLogoutButton() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -499,6 +568,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         );
       },
+    );
+  }
+
+  void _showApiConfigDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('API Configuration'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Base URL: http://192.168.41.23:5074/api'),
+            SizedBox(height: 8),
+            Text('Environment: Development'),
+            SizedBox(height: 8),
+            Text('Location Service: Mock Implementation'),
+            SizedBox(height: 8),
+            Text('Email Service: Real Implementation'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDebugInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Debug Information'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('App Version: 1.0.0+1'),
+            SizedBox(height: 8),
+            Text('Flutter Version: 3.7.2'),
+            SizedBox(height: 8),
+            Text('Build Mode: Debug'),
+            SizedBox(height: 8),
+            Text('Location Package: geolocator ^11.0.0'),
+            SizedBox(height: 8),
+            Text('Maps Package: google_maps_flutter ^2.6.0'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 }
