@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
+import 'package:stibe_partner/providers/auth_provider.dart';
+import 'package:stibe_partner/screens/auth/business_profile_setup_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -23,8 +26,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Business setup prompt (if needed)
+              _buildBusinessSetupPrompt(),
+              
               // Welcome section
               _buildWelcomeSection(),
+              
+              const SizedBox(height: 24),
+              
+              // Quick actions
+              _buildQuickActions(),
               
               const SizedBox(height: 24),
               
@@ -44,6 +55,95 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+  
+  Widget _buildBusinessSetupPrompt() {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, _) {
+        // Check if business profile needs setup
+        final needsSetup = authProvider.user?.business == null;
+        
+        if (!needsSetup) return const SizedBox.shrink();
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            border: Border.all(color: Colors.orange.shade200),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.business_center,
+                  color: Colors.orange.shade700,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Complete Your Business Setup',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Set up your salon profile to start accepting bookings',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.orange.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 80,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => BusinessProfileSetupScreen(
+                          onSetupComplete: () {
+                            Navigator.of(context).pop();
+                            // Refresh the dashboard
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  child: const Text(
+                    'Setup',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
   
@@ -80,20 +180,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildWelcomeCard(
-                icon: Icons.calendar_today,
-                title: '8',
-                subtitle: 'Appointments',
+              Expanded(
+                child: _buildWelcomeCard(
+                  icon: Icons.calendar_today,
+                  title: '8',
+                  subtitle: 'Appointments',
+                ),
               ),
-              _buildWelcomeCard(
-                icon: Icons.watch_later_outlined,
-                title: '3',
-                subtitle: 'Pending',
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildWelcomeCard(
+                  icon: Icons.watch_later_outlined,
+                  title: '3',
+                  subtitle: 'Pending',
+                ),
               ),
-              _buildWelcomeCard(
-                icon: Icons.attach_money,
-                title: '\$450',
-                subtitle: 'Today\'s Revenue',
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildWelcomeCard(
+                  icon: Icons.attach_money,
+                  title: '\$450',
+                  subtitle: 'Today\'s Revenue',
+                ),
               ),
             ],
           ),
@@ -138,6 +246,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+  
+  Widget _buildQuickActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionCard(
+                icon: Icons.add_circle_outline,
+                title: 'New Booking',
+                subtitle: 'Create appointment',
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.of(context).pushNamed('/appointments');
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                icon: Icons.person_add_outlined,
+                title: 'Add Customer',
+                subtitle: 'New client profile',
+                color: Colors.green,
+                onTap: () {
+                  Navigator.of(context).pushNamed('/customers');
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionCard(
+                icon: Icons.spa_outlined,
+                title: 'Manage Services',
+                subtitle: 'Update pricing',
+                color: Colors.purple,
+                onTap: () {
+                  Navigator.of(context).pushNamed('/services');
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                icon: Icons.analytics_outlined,
+                title: 'View Reports',
+                subtitle: 'Business insights',
+                color: Colors.blue,
+                onTap: () {
+                  Navigator.of(context).pushNamed('/analytics');
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: color.withOpacity(0.8),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

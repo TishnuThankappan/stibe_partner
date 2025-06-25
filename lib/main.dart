@@ -4,9 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/providers/auth_provider.dart';
 import 'package:stibe_partner/providers/appointment_provider.dart';
-import 'package:stibe_partner/screens/auth/business_profile_setup_screen.dart';
 import 'package:stibe_partner/screens/auth/auth_wrapper_screen.dart';
-import 'package:stibe_partner/screens/auth/onboarding_screen.dart';
 import 'package:stibe_partner/screens/main_navigation_screen.dart';
 
 void main() async {
@@ -73,44 +71,18 @@ class AuthenticationWrapper extends StatelessWidget {
         final bool isAuthenticated = authProvider.isAuthenticated;
         
         if (isAuthenticated) {
-          // Check if business profile is set up
-          final hasBusiness = authProvider.user?.business != null;
-          
-          if (hasBusiness) {
-            // User is authenticated and has business profile, show main app
-            return const MainNavigationScreen();
-          } else {
-            // User is authenticated but needs to set up business profile
-            return BusinessProfileSetupScreen(
-              onSetupComplete: () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const MainNavigationScreen(),
-                  ),
-                );
-              },
-            );
-          }        } else {
+          // User is authenticated, go directly to main dashboard
+          return const MainNavigationScreen();
+        } else {
           // User is not authenticated, show auth wrapper
           return AuthWrapperScreen(
             onAuthSuccess: () {
-              // Check if user has business profile after authentication
-              final hasBusiness = Provider.of<AuthProvider>(context, listen: false).user?.business != null;
-              
-              if (hasBusiness) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const MainNavigationScreen(),
-                  ),
-                );
-              } else {
-                // Show onboarding for new users
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const OnboardingScreen(),
-                  ),
-                );
-              }
+              // Navigate directly to dashboard after successful login
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => const MainNavigationScreen(),
+                ),
+              );
             },
           );
         }

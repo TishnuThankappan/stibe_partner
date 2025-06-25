@@ -4,11 +4,7 @@ import 'package:stibe_partner/screens/analytics/analytics_screen.dart';
 import 'package:stibe_partner/screens/appointments/appointments_screen.dart';
 import 'package:stibe_partner/screens/customers/customers_screen.dart';
 import 'package:stibe_partner/screens/dashboard/dashboard_screen.dart';
-import 'package:stibe_partner/screens/finance/finance_screen.dart';
-import 'package:stibe_partner/screens/inventory/inventory_screen.dart';
-import 'package:stibe_partner/screens/marketing/marketing_screen.dart';
 import 'package:stibe_partner/screens/services/services_screen.dart';
-import 'package:stibe_partner/screens/settings/settings_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -23,65 +19,45 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final List<Widget> _screens = [
     const DashboardScreen(),
     const AppointmentsScreen(),
-    const ServicesScreen(),
     const CustomersScreen(),
-    const FinanceScreen(),
-    const MarketingScreen(),
-    const InventoryScreen(),
+    const ServicesScreen(),
     const AnalyticsScreen(),
-    const SettingsScreen(),
   ];
   
   final List<String> _titles = [
     'Dashboard',
-    'Appointments',
-    'Services',
+    'Bookings',
     'Customers',
-    'Finance',
-    'Marketing',
-    'Inventory',
+    'Services',
     'Analytics',
-    'Settings',
   ];
   
   final List<IconData> _icons = [
     Icons.dashboard_outlined,
     Icons.calendar_today_outlined,
-    Icons.spa_outlined,
     Icons.people_outline,
-    Icons.account_balance_wallet_outlined,
-    Icons.campaign_outlined,
-    Icons.inventory_outlined,
+    Icons.spa_outlined,
     Icons.analytics_outlined,
-    Icons.settings_outlined,
   ];
   
   final List<IconData> _activeIcons = [
     Icons.dashboard,
     Icons.calendar_today,
-    Icons.spa,
     Icons.people,
-    Icons.account_balance_wallet,
-    Icons.campaign,
-    Icons.inventory,
+    Icons.spa,
     Icons.analytics,
-    Icons.settings,
   ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex < 5 ? _currentIndex : 4, // Keep the more tab selected for other screens
+        currentIndex: _currentIndex,
         onTap: (index) {
-          if (index == 4 && _currentIndex >= 4) {
-            // If more tab is tapped while already on a "more" screen, show the more menu
-            _showMoreMenu();
-          } else {
-            setState(() {
-              _currentIndex = index;
-            });
-          }
+          setState(() {
+            _currentIndex = index;
+          });
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
@@ -118,89 +94,137 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             label: _titles[3],
           ),
           BottomNavigationBarItem(
-            icon: const Icon(Icons.more_horiz),
-            activeIcon: const Icon(Icons.more_horiz),
-            label: 'More',
+            icon: Icon(_icons[4]),
+            activeIcon: Icon(_activeIcons[4]),
+            label: _titles[4],
           ),
         ],
       ),
       floatingActionButton: _shouldShowFAB()
           ? FloatingActionButton(
               onPressed: () {
-                // Show add dialog based on current tab
-                if (_currentIndex == 1) {
-                  // Add new appointment
-                } else if (_currentIndex == 2) {
-                  // Add new service
-                } else if (_currentIndex == 3) {
-                  // Add new customer
-                } else if (_currentIndex == 6) {
-                  // Add new inventory item
-                }
+                _showQuickActionDialog();
               },
               backgroundColor: AppColors.primary,
-              child: const Icon(Icons.add),
+              child: const Icon(Icons.add, color: Colors.white),
             )
           : null,
     );
   }
-  
+
   bool _shouldShowFAB() {
-    return _currentIndex == 1 || _currentIndex == 2 || _currentIndex == 3 || _currentIndex == 6;
+    // Show FAB on bookings, customers, and services screens
+    return _currentIndex == 1 || _currentIndex == 2 || _currentIndex == 3;
   }
-  
-  void _showMoreMenu() {
+
+  void _showQuickActionDialog() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: _buildQuickActionButton(
+                    icon: Icons.event_note,
+                    label: 'New Booking',
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 1);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _buildQuickActionButton(
+                    icon: Icons.person_add,
+                    label: 'Add Customer',
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 2);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _buildQuickActionButton(
+                    icon: Icons.spa,
+                    label: 'Add Service',
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 3);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
         ),
       ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Title
-              const Padding(
-                padding: EdgeInsets.only(bottom: 16.0),
-                child: Text(
-                  'More Options',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+    );
+  }
+
+  Widget _buildQuickActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              
-              // Menu options
-              for (int i = 4; i < _titles.length; i++)
-                ListTile(
-                  leading: Icon(
-                    _icons[i],
-                    color: _currentIndex == i ? AppColors.primary : AppColors.textSecondary,
-                  ),
-                  title: Text(
-                    _titles[i],
-                    style: TextStyle(
-                      color: _currentIndex == i ? AppColors.primary : AppColors.textPrimary,
-                      fontWeight: _currentIndex == i ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                  ),
-                  onTap: () {
-                    setState(() {
-                      _currentIndex = i;
-                    });
-                    Navigator.pop(context);
-                  },
-                ),
-            ],
-          ),
-        );
-      },
+              child: Icon(
+                icon,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
