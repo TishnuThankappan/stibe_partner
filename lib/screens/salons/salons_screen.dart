@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/screens/salons/salon_detail_screen.dart';
 import 'package:stibe_partner/screens/salons/add_salon_screen.dart';
+import 'package:stibe_partner/screens/salons/salon_image_preview_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/api/salon_service.dart';
 
@@ -204,17 +205,150 @@ class _SalonsScreenState extends State<SalonsScreen> {
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
                   ),
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primary.withOpacity(0.8),
-                      AppColors.secondary.withOpacity(0.8),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
                 ),
                 child: Stack(
                   children: [
+                    // Image or placeholder
+                    GestureDetector(
+                      onTap: () {
+                        if (salon.imageUrls.isNotEmpty) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SalonImagePreviewScreen(
+                                imageUrls: salon.imageUrls,
+                                initialIndex: 0,
+                                salonName: salon.name,
+                              ),
+                            ),
+                          );
+                        } else if (salon.profilePictureUrl != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SalonImagePreviewScreen(
+                                imageUrls: [salon.profilePictureUrl!],
+                                initialIndex: 0,
+                                salonName: salon.name,
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
+                        ),
+                        child: salon.imageUrls.isNotEmpty
+                            ? Hero(
+                                tag: 'salon_image_${salon.name}_0',
+                                child: Image.network(
+                                  salon.imageUrls.first,
+                                  width: double.infinity,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return _buildImagePlaceholder();
+                                  },
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return _buildImagePlaceholder();
+                                  },
+                                ),
+                              )
+                            : salon.profilePictureUrl != null
+                                ? Hero(
+                                    tag: 'salon_image_${salon.name}_0',
+                                    child: Image.network(
+                                      salon.profilePictureUrl!,
+                                      width: double.infinity,
+                                      height: 120,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return _buildImagePlaceholder();
+                                      },
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) return child;
+                                        return _buildImagePlaceholder();
+                                      },
+                                    ),
+                                  )
+                                : _buildImagePlaceholder(),
+                      ),
+                    ),
+                    
+                    // Image count indicator (if multiple images or has images)
+                    if (salon.imageUrls.isNotEmpty || salon.profilePictureUrl != null)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.photo_camera,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                salon.imageUrls.length > 1 
+                                    ? '${salon.imageUrls.length}'
+                                    : salon.imageUrls.isNotEmpty 
+                                        ? '1'
+                                        : '1',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    
+                    // Tap hint overlay (shows user can tap to view)
+                    if (salon.imageUrls.isNotEmpty || salon.profilePictureUrl != null)
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.zoom_in,
+                                color: Colors.white,
+                                size: 10,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                'View',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    
+                    // Status badge
                     Positioned(
                       top: 12,
                       right: 12,
@@ -232,13 +366,6 @@ class _SalonsScreenState extends State<SalonsScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                    ),
-                    Center(
-                      child: Icon(
-                        Icons.store,
-                        size: 48,
-                        color: Colors.white.withOpacity(0.9),
                       ),
                     ),
                   ],
@@ -371,6 +498,44 @@ class _SalonsScreenState extends State<SalonsScreen> {
               style: TextStyle(
                 fontSize: 11,
                 color: color.withOpacity(0.8),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      width: double.infinity,
+      height: 120,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary.withOpacity(0.8),
+            AppColors.secondary.withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.store,
+              size: 40,
+              color: Colors.white.withOpacity(0.9),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'No Image',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),

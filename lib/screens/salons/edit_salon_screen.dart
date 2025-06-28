@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import 'package:stibe_partner/constants/app_theme.dart';
+import 'package:stibe_partner/screens/salons/location_picker_screen.dart';
 import 'package:stibe_partner/widgets/app_button.dart';
 import 'package:stibe_partner/widgets/app_text_field.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:stibe_partner/screens/salons/location_picker_screen.dart';
 import 'package:stibe_partner/api/salon_service.dart';
 import 'package:stibe_partner/api/image_upload_service.dart';
-import 'package:stibe_partner/providers/auth_provider.dart';
-import 'package:provider/provider.dart';
-import 'dart:io';
 
-class AddSalonScreen extends StatefulWidget {
-  const AddSalonScreen({super.key});
+class EditSalonScreen extends StatefulWidget {
+  final SalonDto salon;
+
+  const EditSalonScreen({super.key, required this.salon});
 
   @override
-  State<AddSalonScreen> createState() => _AddSalonScreenState();
+  State<EditSalonScreen> createState() => _EditSalonScreenState();
 }
 
-class _AddSalonScreenState extends State<AddSalonScreen> {
+class _EditSalonScreenState extends State<EditSalonScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
@@ -34,7 +34,9 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
   
   // Image picker
   final ImagePicker _picker = ImagePicker();
-  List<File> _salonImages = [];
+  List<File> _newSalonImages = [];
+  List<String> _existingImageUrls = [];
+  List<String> _imagesToDelete = [];
   
   // Location
   double? _selectedLatitude;
@@ -42,15 +44,49 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
   String? _selectedLocationName;
   
   // Business hours
-  final Map<String, Map<String, dynamic>> _businessHours = {
-    'Monday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
-    'Tuesday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
-    'Wednesday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
-    'Thursday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
-    'Friday': {'isOpen': true, 'open': '09:00', 'close': '19:00'},
-    'Saturday': {'isOpen': true, 'open': '08:00', 'close': '17:00'},
-    'Sunday': {'isOpen': false, 'open': '10:00', 'close': '16:00'},
-  };
+  Map<String, Map<String, dynamic>> _businessHours = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeForm();
+  }
+
+  void _initializeForm() {
+    // Initialize form fields with existing salon data
+    _nameController.text = widget.salon.name;
+    _addressController.text = widget.salon.address;
+    _cityController.text = widget.salon.city;
+    _stateController.text = widget.salon.state;
+    _zipController.text = widget.salon.zipCode;
+    _phoneController.text = widget.salon.phoneNumber;
+    _emailController.text = widget.salon.email;
+    _descriptionController.text = widget.salon.description;
+    
+    // Initialize location
+    _selectedLatitude = widget.salon.latitude;
+    _selectedLongitude = widget.salon.longitude;
+    _selectedLocationName = '${widget.salon.address}, ${widget.salon.city}';
+    
+    // Initialize existing images
+    _existingImageUrls = List<String>.from(widget.salon.imageUrls);
+    
+    // Initialize business hours
+    if (widget.salon.businessHours != null) {
+      // Parse business hours from JSON string if available
+      // For now, use default hours
+    }
+    
+    _businessHours = {
+      'Monday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
+      'Tuesday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
+      'Wednesday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
+      'Thursday': {'isOpen': true, 'open': '09:00', 'close': '18:00'},
+      'Friday': {'isOpen': true, 'open': '09:00', 'close': '19:00'},
+      'Saturday': {'isOpen': true, 'open': '08:00', 'close': '17:00'},
+      'Sunday': {'isOpen': false, 'open': '10:00', 'close': '16:00'},
+    };
+  }
 
   @override
   void dispose() {
@@ -70,7 +106,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
       final List<XFile> images = await _picker.pickMultiImage();
       if (images.isNotEmpty) {
         setState(() {
-          _salonImages.addAll(images.map((image) => File(image.path)));
+          _newSalonImages.addAll(images.map((image) => File(image.path)));
         });
       }
     } catch (e) {
@@ -83,9 +119,17 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
     }
   }
 
-  void _removeImage(int index) {
+  void _removeNewImage(int index) {
     setState(() {
-      _salonImages.removeAt(index);
+      _newSalonImages.removeAt(index);
+    });
+  }
+
+  void _removeExistingImage(int index) {
+    setState(() {
+      final imageUrl = _existingImageUrls[index];
+      _imagesToDelete.add(imageUrl);
+      _existingImageUrls.removeAt(index);
     });
   }
 
@@ -110,7 +154,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
     }
   }
 
-  Future<void> _createSalon() async {
+  Future<void> _updateSalon() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -121,21 +165,20 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
     });
 
     try {
-      // Upload images first if any are selected
-      List<String> uploadedImageUrls = [];
-      if (_salonImages.isNotEmpty) {
+      // Upload new images first if any are selected
+      List<String> newUploadedImageUrls = [];
+      if (_newSalonImages.isNotEmpty) {
         try {
-          print('📤 Uploading ${_salonImages.length} salon images...');
+          print('📤 Uploading ${_newSalonImages.length} new salon images...');
           final imageUploadService = ImageUploadService();
-          uploadedImageUrls = await imageUploadService.uploadImages(_salonImages);
-          print('✅ Uploaded ${uploadedImageUrls.length} images successfully');
+          newUploadedImageUrls = await imageUploadService.uploadImages(_newSalonImages);
+          print('✅ Uploaded ${newUploadedImageUrls.length} new images successfully');
         } catch (e) {
           print('❌ Image upload failed: $e');
-          // Continue with salon creation even if image upload fails
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Warning: Image upload failed. Salon will be created without images.'),
+                content: Text('Warning: New image upload failed. Salon will be updated without new images.'),
                 backgroundColor: Colors.orange,
                 duration: const Duration(seconds: 3),
               ),
@@ -143,6 +186,9 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
           }
         }
       }
+
+      // Combine existing images (minus deleted ones) with newly uploaded images
+      final allImageUrls = [..._existingImageUrls, ...newUploadedImageUrls];
 
       // Prepare business hours data
       final businessHours = <String, Map<String, dynamic>>{};
@@ -154,11 +200,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
         };
       });
 
-      // Convert opening and closing times to proper format
-      final openingTime = '${_businessHours.values.first['open']}:00';
-      final closingTime = '${_businessHours.values.first['close']}:00';
-
-      print('Creating salon with:');
+      print('Updating salon with:');
       print('- Name: ${_nameController.text}');
       print('- Description: ${_descriptionController.text}');
       print('- Address: ${_addressController.text}');
@@ -167,55 +209,43 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
       print('- ZIP: ${_zipController.text}');
       print('- Phone: ${_phoneController.text}');
       print('- Email: ${_emailController.text}');
-      print('- Images: ${_salonImages.length} photos selected, ${uploadedImageUrls.length} uploaded');
-      print('- Image URLs: $uploadedImageUrls');
-      print('- Location: ${_selectedLocationName ?? "Not selected"}');
-      print('- Business Hours: $businessHours');
-      if (_selectedLatitude != null && _selectedLongitude != null) {
-        print('- Coordinates: $_selectedLatitude, $_selectedLongitude');
-      }
+      print('- Existing images: ${_existingImageUrls.length}');
+      print('- New images: ${newUploadedImageUrls.length}');
+      print('- Images to delete: ${_imagesToDelete.length}');
+      print('- Total images: ${allImageUrls.length}');
+      print('- Location: ${_selectedLocationName ?? "Not changed"}');
 
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      if (authProvider.user == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final salonService = SalonService();
-      final request = CreateSalonRequest(
-        name: _nameController.text.trim(),
-        description: _descriptionController.text.trim(),
-        address: _addressController.text.trim(),
-        city: _cityController.text.trim(),
-        state: _stateController.text.trim(),
-        zipCode: _zipController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
-        email: _emailController.text.trim(),
-        openingTime: openingTime,
-        closingTime: closingTime,
-        businessHours: businessHours,
-        currentLatitude: _selectedLatitude,
-        currentLongitude: _selectedLongitude,
-        useCurrentLocation: _selectedLatitude != null && _selectedLongitude != null,
-        imageUrls: uploadedImageUrls.isNotEmpty ? uploadedImageUrls : null, // Add uploaded image URLs
+      // Create update request
+      final updateRequest = UpdateSalonRequest(
+        id: widget.salon.id,
+        name: _nameController.text,
+        description: _descriptionController.text,
+        address: _addressController.text,
+        city: _cityController.text,
+        state: _stateController.text,
+        zipCode: _zipController.text,
+        phoneNumber: _phoneController.text,
+        email: _emailController.text,
+        openingTime: "${widget.salon.openingTime}:00", // Convert HH:mm to HH:mm:ss
+        closingTime: "${widget.salon.closingTime}:00", // Convert HH:mm to HH:mm:ss
+        businessHours: _businessHours.isNotEmpty ? _businessHours : null,
+        latitude: _selectedLatitude,
+        longitude: _selectedLongitude,
+        imageUrls: allImageUrls.isNotEmpty ? allImageUrls : null,
+        isActive: widget.salon.isActive,
       );
 
-      final salon = await salonService.createSalon(request);
-
-      print('✅ Salon created successfully: ${salon.toJson()}');
+      // Call the update API
+      final salonService = SalonService();
+      await salonService.updateSalon(updateRequest);
 
       if (mounted) {
-        final imagesMessage = uploadedImageUrls.isNotEmpty 
-            ? '${uploadedImageUrls.length} image${uploadedImageUrls.length == 1 ? '' : 's'} uploaded successfully!'
-            : _salonImages.isNotEmpty 
-                ? 'Images selected but upload failed'
-                : 'No images selected';
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Salon "${salon.name}" created successfully!\n'
-              '$imagesMessage\n'
-              '${_selectedLocationName != null ? "Location: $_selectedLocationName" : "No location selected"}'
+              'Salon "${_nameController.text}" updated successfully!\n'
+              '${allImageUrls.length} total images\n'
+              '${_selectedLocationName != null ? "Location: $_selectedLocationName" : "Location not changed"}'
             ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
@@ -231,7 +261,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating salon: ${_errorMessage}'),
+            content: Text('Error updating salon: $_errorMessage'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
@@ -249,9 +279,13 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const CustomAppBar(
-        title: 'Add New Salon',
+      appBar: CustomAppBar(
+        title: 'Edit Salon',
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -260,10 +294,9 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_errorMessage != null)
+              if (_errorMessage != null) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
                     color: Colors.red.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -271,7 +304,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.error, color: Colors.red.shade600),
+                      Icon(Icons.error, color: Colors.red.shade600, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -282,6 +315,8 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
+              ],
 
               // Basic Information
               _buildSectionHeader('Basic Information'),
@@ -303,7 +338,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
               
               AppTextField(
                 controller: _descriptionController,
-                label: 'Description (Optional)',
+                label: 'Description',
                 hintText: 'Brief description of your salon',
                 prefixIcon: const Icon(Icons.description),
                 maxLines: 3,
@@ -334,9 +369,6 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
               ),
               const SizedBox(height: 16),
               
-              _buildLocationPicker(),
-              const SizedBox(height: 16),
-              
               Row(
                 children: [
                   Expanded(
@@ -344,38 +376,25 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                     child: AppTextField(
                       controller: _cityController,
                       label: 'City',
-                      hintText: 'City',
+                      hintText: 'Enter city',
+                      prefixIcon: const Icon(Icons.location_city),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Required';
+                          return 'Please enter city';
                         }
                         return null;
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: AppTextField(
                       controller: _stateController,
                       label: 'State',
-                      hintText: 'State',
+                      hintText: 'Enter state',
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Required';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppTextField(
-                      controller: _zipController,
-                      label: 'ZIP Code',
-                      hintText: 'ZIP',
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Required';
+                          return 'Please enter state';
                         }
                         return null;
                       },
@@ -383,6 +402,24 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              
+              AppTextField(
+                controller: _zipController,
+                label: 'ZIP Code',
+                hintText: 'Enter ZIP code',
+                prefixIcon: const Icon(Icons.markunread_mailbox),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter ZIP code';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Location Picker
+              _buildLocationPicker(),
               const SizedBox(height: 24),
 
               // Contact Information
@@ -428,10 +465,10 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
               _buildBusinessHours(),
               const SizedBox(height: 32),
 
-              // Create Button
+              // Update Button
               AppButton(
-                text: 'Create Salon',
-                onPressed: _isLoading ? null : () => _createSalon(),
+                text: 'Update Salon',
+                onPressed: _isLoading ? null : () => _updateSalon(),
                 isLoading: _isLoading,
                 width: double.infinity,
               ),
@@ -466,137 +503,69 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
     );
   }
 
-  Widget _buildBusinessHours() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        children: _businessHours.entries.map((entry) {
-          final day = entry.key;
-          final hours = entry.value;
-          final isLast = entry.key == _businessHours.keys.last;
-          
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: isLast ? null : Border(
-                bottom: BorderSide(color: Colors.grey.shade200),
-              ),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    day,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Switch(
-                  value: hours['isOpen'],
-                  onChanged: (value) {
-                    setState(() {
-                      _businessHours[day]!['isOpen'] = value;
-                    });
-                  },
-                  activeColor: AppColors.primary,
-                ),
-                const SizedBox(width: 16),
-                if (hours['isOpen']) ...[
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _buildTimeField(
-                            value: hours['open'],
-                            onChanged: (value) {
-                              setState(() {
-                                _businessHours[day]!['open'] = value;
-                              });
-                            },
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('to'),
-                        ),
-                        Expanded(
-                          child: _buildTimeField(
-                            value: hours['close'],
-                            onChanged: (value) {
-                              setState(() {
-                                _businessHours[day]!['close'] = value;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  const Expanded(
-                    child: Text(
-                      'Closed',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildTimeField({
-    required String value,
-    required Function(String) onChanged,
-  }) {
-    return GestureDetector(
-      onTap: () async {
-        final TimeOfDay? time = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay(
-            hour: int.parse(value.split(':')[0]),
-            minute: int.parse(value.split(':')[1]),
-          ),
-        );
-        if (time != null) {
-          final timeString = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-          onChanged(timeString);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          value,
-          style: const TextStyle(fontSize: 14),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-
   Widget _buildImageSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Add Images Button
+        // Existing Images
+        if (_existingImageUrls.isNotEmpty) ...[
+          Text(
+            'Current Images',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 100,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _existingImageUrls.length,
+              itemBuilder: (context, index) {
+                return Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          _existingImageUrls[index],
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: () => _removeExistingImage(index),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // Add New Images Button
         Container(
           width: double.infinity,
           height: 120,
@@ -623,7 +592,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Add Salon Photos',
+                    'Add New Photos',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -644,11 +613,11 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
           ),
         ),
         
-        // Display selected images
-        if (_salonImages.isNotEmpty) ...[
+        // Display new selected images
+        if (_newSalonImages.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text(
-            '${_salonImages.length} image${_salonImages.length == 1 ? '' : 's'} selected',
+            '${_newSalonImages.length} new image${_newSalonImages.length == 1 ? '' : 's'} selected',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -660,7 +629,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
             height: 100,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: _salonImages.length,
+              itemCount: _newSalonImages.length,
               itemBuilder: (context, index) {
                 return Container(
                   margin: const EdgeInsets.only(right: 12),
@@ -669,7 +638,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.file(
-                          _salonImages[index],
+                          _newSalonImages[index],
                           width: 100,
                           height: 100,
                           fit: BoxFit.cover,
@@ -679,7 +648,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                         top: 4,
                         right: 4,
                         child: GestureDetector(
-                          onTap: () => _removeImage(index),
+                          onTap: () => _removeNewImage(index),
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: const BoxDecoration(
@@ -690,6 +659,26 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                               Icons.close,
                               color: Colors.white,
                               size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // New image indicator
+                      Positioned(
+                        bottom: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'NEW',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -721,17 +710,10 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.map_outlined,
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
+                Icon(
+                  Icons.map,
+                  color: Colors.grey.shade600,
+                  size: 24,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -739,17 +721,18 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Select Location on Map',
-                        style: const TextStyle(
+                        'Precise Location',
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _selectedLocationName != null
-                            ? _selectedLocationName!
-                            : 'Tap to select precise location on map',
+                            ? 'Location: $_selectedLocationName'
+                            : 'Tap to update location on map',
                         style: TextStyle(
                           fontSize: 14,
                           color: _selectedLocationName != null 
@@ -782,6 +765,123 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBusinessHours() {
+    return Column(
+      children: _businessHours.entries.map((entry) {
+        final day = entry.key;
+        final hours = entry.value;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 80,
+                child: Text(
+                  day,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Switch(
+                value: hours['isOpen'],
+                onChanged: (value) {
+                  setState(() {
+                    _businessHours[day]!['isOpen'] = value;
+                  });
+                },
+                activeColor: AppColors.primary,
+              ),
+              if (hours['isOpen']) ...[
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildTimeSelector(
+                          hours['open'],
+                          (time) {
+                            setState(() {
+                              _businessHours[day]!['open'] = time;
+                            });
+                          },
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('-'),
+                      ),
+                      Expanded(
+                        child: _buildTimeSelector(
+                          hours['close'],
+                          (time) {
+                            setState(() {
+                              _businessHours[day]!['close'] = time;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Closed',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildTimeSelector(String currentTime, Function(String) onTimeChanged) {
+    return GestureDetector(
+      onTap: () async {
+        final TimeOfDay? time = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay(
+            hour: int.parse(currentTime.split(':')[0]),
+            minute: int.parse(currentTime.split(':')[1]),
+          ),
+        );
+        
+        if (time != null) {
+          final formattedTime = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+          onTimeChanged(formattedTime);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          currentTime,
+          style: const TextStyle(fontSize: 14),
+          textAlign: TextAlign.center,
         ),
       ),
     );

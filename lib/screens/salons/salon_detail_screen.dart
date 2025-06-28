@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/screens/salons/services_management_screen.dart';
 import 'package:stibe_partner/screens/salons/staff_management_screen.dart';
+import 'package:stibe_partner/screens/salons/edit_salon_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
+import 'package:stibe_partner/api/salon_service.dart';
 
 class SalonDetailScreen extends StatefulWidget {
   final Map<String, dynamic> salon;
@@ -15,6 +17,7 @@ class SalonDetailScreen extends StatefulWidget {
 
 class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final SalonService _salonService = SalonService();
 
   @override
   void initState() {
@@ -28,6 +31,60 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
     super.dispose();
   }
 
+  Future<void> _navigateToEditSalon() async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Fetch the salon details by ID to get the proper SalonDto structure
+      final salonDto = await _salonService.getSalonById(widget.salon['id']);
+      
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Navigate to edit screen
+      if (mounted) {
+        final result = await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => EditSalonScreen(salon: salonDto),
+          ),
+        );
+
+        // If salon was updated, you might want to refresh the current screen
+        if (result == true && mounted) {
+          // Optionally refresh the salon data here
+          setState(() {}); // This will trigger a rebuild
+        }
+      }
+    } catch (e) {
+      // Close loading dialog if it's still open
+      if (mounted) Navigator.of(context).pop();
+      
+      // Show error dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to load salon details: ${e.toString()}'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,9 +94,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () {
-              // Navigate to edit salon screen
-            },
+            onPressed: () => _navigateToEditSalon(),
           ),
           PopupMenuButton(
             itemBuilder: (context) => [
