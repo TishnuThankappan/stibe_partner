@@ -38,6 +38,11 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
   List<String> _existingImageUrls = [];
   List<String> _imagesToDelete = [];
   
+  // Profile picture
+  File? _newProfilePicture;
+  String? _existingProfilePictureUrl;
+  bool _removeProfilePicture = false;
+  
   // Location
   double? _selectedLatitude;
   double? _selectedLongitude;
@@ -70,6 +75,9 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
     
     // Initialize existing images
     _existingImageUrls = List<String>.from(widget.salon.imageUrls);
+    
+    // Initialize existing profile picture
+    _existingProfilePictureUrl = widget.salon.profilePictureUrl;
     
     // Initialize business hours
     if (widget.salon.businessHours != null) {
@@ -133,6 +141,39 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
     });
   }
 
+  // Profile picture methods
+  Future<void> _pickProfilePicture() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
+      );
+      
+      if (pickedFile != null) {
+        setState(() {
+          _newProfilePicture = File(pickedFile.path);
+          _removeProfilePicture = false;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking profile picture: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _removeCurrentProfilePicture() {
+    setState(() {
+      _newProfilePicture = null;
+      _removeProfilePicture = true;
+    });
+  }
+
   Future<void> _selectLocation() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -165,7 +206,38 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
     });
 
     try {
-      // Upload new images first if any are selected
+      // Delete removed images from server storage first
+      if (_imagesToDelete.isNotEmpty) {
+        try {
+          print('🗑️ Deleting ${_imagesToDelete.length} images from server storage...');
+          final salonService = SalonService();
+          await salonService.deleteSalonImages(widget.salon.id, _imagesToDelete);
+          print('✅ Successfully deleted ${_imagesToDelete.length} images from server storage');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Successfully deleted ${_imagesToDelete.length} images from server'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          print('❌ Image deletion failed: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Warning: Failed to delete some images from server. The salon will still be updated.'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+
+      // Upload new images if any are selected
       List<String> newUploadedImageUrls = [];
       if (_newSalonImages.isNotEmpty) {
         try {
@@ -185,6 +257,33 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
             );
           }
         }
+      }
+
+      // Upload new profile picture if selected
+      String? finalProfilePictureUrl = _existingProfilePictureUrl;
+      if (_newProfilePicture != null) {
+        try {
+          print('📤 Uploading new profile picture...');
+          final imageUploadService = ImageUploadService();
+          final profilePictureUrls = await imageUploadService.uploadImages([_newProfilePicture!]);
+          if (profilePictureUrls.isNotEmpty) {
+            finalProfilePictureUrl = profilePictureUrls.first;
+            print('✅ Profile picture uploaded successfully: $finalProfilePictureUrl');
+          }
+        } catch (e) {
+          print('❌ Profile picture upload failed: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Warning: Profile picture upload failed.'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } else if (_removeProfilePicture) {
+        finalProfilePictureUrl = ""; // Send empty string to remove
       }
 
       // Combine existing images (minus deleted ones) with newly uploaded images
@@ -232,6 +331,7 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
         latitude: _selectedLatitude,
         longitude: _selectedLongitude,
         imageUrls: allImageUrls.isNotEmpty ? allImageUrls : null,
+        profilePictureUrl: finalProfilePictureUrl,
         isActive: widget.salon.isActive,
       );
 
@@ -343,6 +443,12 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
                 prefixIcon: const Icon(Icons.description),
                 maxLines: 3,
               ),
+              const SizedBox(height: 24),
+
+              // Profile Picture
+              _buildSectionHeader('Profile Picture'),
+              const SizedBox(height: 16),
+              _buildProfilePictureSection(),
               const SizedBox(height: 24),
 
               // Salon Images
@@ -884,6 +990,121 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
           textAlign: TextAlign.center,
         ),
       ),
+    );
+  }
+
+  Widget _buildProfilePictureSection() {
+    // Determine which image to show
+    ImageProvider? currentImage;
+    bool hasProfilePicture = false;
+    
+    if (_newProfilePicture != null) {
+      currentImage = FileImage(_newProfilePicture!);
+      hasProfilePicture = true;
+    } else if (_existingProfilePictureUrl != null && !_removeProfilePicture) {
+      currentImage = NetworkImage(_existingProfilePictureUrl!);
+      hasProfilePicture = true;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            // Profile picture display
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey.shade200,
+                border: Border.all(
+                  color: Colors.grey.shade300,
+                  width: 2,
+                ),
+              ),
+              child: hasProfilePicture
+                  ? ClipOval(
+                      child: currentImage != null
+                          ? Image(
+                              image: currentImage,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            )
+                          : Icon(
+                              Icons.store,
+                              size: 40,
+                              color: Colors.grey.shade500,
+                            ),
+                    )
+                  : Icon(
+                      Icons.store,
+                      size: 40,
+                      color: Colors.grey.shade500,
+                    ),
+            ),
+            const SizedBox(width: 16),
+            // Action buttons
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Profile Picture',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This will be displayed as your salon\'s main image',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickProfilePicture,
+                          icon: const Icon(Icons.photo_camera, size: 18),
+                          label: Text(
+                            hasProfilePicture ? 'Change' : 'Upload',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          ),
+                        ),
+                      ),
+                      if (hasProfilePicture) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _removeCurrentProfilePicture,
+                            icon: const Icon(Icons.delete, size: 18),
+                            label: const Text('Remove', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

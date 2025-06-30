@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
-import 'package:stibe_partner/screens/salons/services_management_screen.dart';
+import 'package:stibe_partner/screens/services/redesigned_services_screen.dart';
 import 'package:stibe_partner/screens/salons/staff_management_screen.dart';
 import 'package:stibe_partner/screens/salons/edit_salon_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
@@ -8,8 +8,13 @@ import 'package:stibe_partner/api/salon_service.dart';
 
 class SalonDetailScreen extends StatefulWidget {
   final Map<String, dynamic> salon;
+  final int? initialTab;
   
-  const SalonDetailScreen({super.key, required this.salon});
+  const SalonDetailScreen({
+    super.key, 
+    required this.salon,
+    this.initialTab,
+  });
 
   @override
   State<SalonDetailScreen> createState() => _SalonDetailScreenState();
@@ -18,11 +23,18 @@ class SalonDetailScreen extends StatefulWidget {
 class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final SalonService _salonService = SalonService();
+  bool _isLoading = false;
+  Map<String, dynamic> _currentSalon = {};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: 4, 
+      vsync: this,
+      initialIndex: widget.initialTab ?? 0,
+    );
+    _currentSalon = Map<String, dynamic>.from(widget.salon);
   }
 
   @override
@@ -85,20 +97,283 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
     }
   }
 
+  Future<void> _toggleSalonStatus() async {
+    final bool currentStatus = _currentSalon['isActive'] ?? true;
+    final bool newStatus = !currentStatus;
+    
+    // Show confirmation dialog
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(newStatus ? 'Activate Salon' : 'Deactivate Salon'),
+        content: Text(
+          newStatus 
+            ? 'Are you sure you want to activate this salon? It will become visible to customers again.'
+            : 'Are you sure you want to deactivate this salon? It will be hidden from customers but you can reactivate it anytime.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: newStatus ? Colors.green : Colors.orange,
+            ),
+            child: Text(newStatus ? 'Activate' : 'Deactivate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final updatedSalon = await _salonService.toggleSalonStatus(
+        _currentSalon['id'],
+        newStatus,
+      );
+
+      setState(() {
+        _currentSalon = updatedSalon.toJson();
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Salon ${newStatus ? "activated" : "deactivated"} successfully!',
+            ),
+            backgroundColor: newStatus ? Colors.green : Colors.orange,
+          ),
+        );
+        
+        // Return updated salon data to parent screen
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteSalon() async {
+    // Show confirmation dialog
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Salon'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Are you sure you want to permanently delete this salon?',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This action cannot be undone. All salon data, including:',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 4),
+            const Text('• Salon information', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('• Images and profile picture', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('• Services and staff', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('• Booking history', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 8),
+            const Text(
+              'will be permanently removed.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete Forever'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Show second confirmation for extra safety
+    final bool? doubleConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Final Confirmation'),
+        content: Text(
+          'Type "${_currentSalon['name']}" to confirm deletion:',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (innerContext) {
+                  final TextEditingController controller = TextEditingController();
+                  return AlertDialog(
+                    title: const Text('Confirm Salon Name'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Type "${_currentSalon['name']}" to confirm:'),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: controller,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter salon name',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(innerContext);
+                          Navigator.pop(context, false);
+                        },
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (controller.text.trim() == _currentSalon['name']) {
+                            Navigator.pop(innerContext);
+                            Navigator.pop(context, true);
+                          } else {
+                            ScaffoldMessenger.of(innerContext).showSnackBar(
+                              const SnackBar(
+                                content: Text('Salon name does not match'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Delete Forever'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (doubleConfirmed != true) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _salonService.deleteSalon(_currentSalon['id']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Salon deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Navigate back to salons list
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting salon: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handlePopupMenuSelection(String value) {
+    switch (value) {
+      case 'settings':
+        // TODO: Navigate to settings screen
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings feature coming soon!')),
+        );
+        break;
+      case 'analytics':
+        // TODO: Navigate to analytics screen
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Analytics feature coming soon!')),
+        );
+        break;
+      case 'deactivate':
+      case 'activate':
+        _toggleSalonStatus();
+        break;
+      case 'delete':
+        _deleteSalon();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppBar(
-        title: widget.salon['name'],
+        title: _currentSalon['name'] ?? widget.salon['name'],
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () => _navigateToEditSalon(),
+            onPressed: _isLoading ? null : () => _navigateToEditSalon(),
           ),
           PopupMenuButton(
-            itemBuilder: (context) => [
-              const PopupMenuItem(
+            onSelected: _isLoading ? null : _handlePopupMenuSelection,
+            itemBuilder: (context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
                 value: 'settings',
                 child: Row(
                   children: [
@@ -108,7 +383,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
                   ],
                 ),
               ),
-              const PopupMenuItem(
+              const PopupMenuItem<String>(
                 value: 'analytics',
                 child: Row(
                   children: [
@@ -118,13 +393,43 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
                   ],
                 ),
               ),
-              const PopupMenuItem(
-                value: 'deactivate',
+              PopupMenuItem<String>(
+                value: _currentSalon['isActive'] ?? true ? 'deactivate' : 'activate',
                 child: Row(
                   children: [
-                    Icon(Icons.pause_circle, size: 20),
+                    Icon(
+                      _currentSalon['isActive'] ?? true ? Icons.pause_circle : Icons.play_circle,
+                      size: 20,
+                      color: _currentSalon['isActive'] ?? true ? Colors.orange : Colors.green,
+                    ),
                     SizedBox(width: 8),
-                    Text('Deactivate'),
+                    Text(
+                      _currentSalon['isActive'] ?? true ? 'Deactivate' : 'Activate',
+                      style: TextStyle(
+                        color: _currentSalon['isActive'] ?? true ? Colors.orange : Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.delete_forever,
+                      size: 20,
+                      color: Colors.red,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Delete Salon',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -144,13 +449,27 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildOverviewTab(),
-          ServicesManagementScreen(salonId: widget.salon['id']),
-          StaffManagementScreen(salonId: widget.salon['id']),
-          _buildBookingsTab(),
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildOverviewTab(),
+              RedesignedServicesScreen(
+                salonId: widget.salon['id'],
+                salonName: widget.salon['name'] ?? 'Salon',
+              ),
+              StaffManagementScreen(salonId: widget.salon['id']),
+              _buildBookingsTab(),
+            ],
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
         ],
       ),
     );
@@ -200,17 +519,22 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.store,
-                  color: AppColors.primary,
-                  size: 24,
-                ),
+              // Profile Picture Avatar
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundImage: widget.salon['profilePictureUrl'] != null && 
+                                widget.salon['profilePictureUrl'].toString().isNotEmpty
+                    ? NetworkImage(widget.salon['profilePictureUrl'])
+                    : null,
+                child: widget.salon['profilePictureUrl'] == null || 
+                       widget.salon['profilePictureUrl'].toString().isEmpty
+                    ? Icon(
+                        Icons.store,
+                        color: AppColors.primary,
+                        size: 24,
+                      )
+                    : null,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -288,7 +612,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
                   Icon(Icons.phone_outlined, color: Colors.grey.shade600, size: 20),
                   const SizedBox(width: 4),
                   Text(
-                    '+1 (555) 123-4567',
+                    widget.salon['phoneNumber'] ?? 'No phone',
                     style: TextStyle(
                       color: Colors.grey.shade600,
                       fontSize: 14,

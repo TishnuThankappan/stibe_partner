@@ -61,16 +61,46 @@ class SalonDto {
     if (json['imageUrls'] != null) {
       if (json['imageUrls'] is List) {
         // Handle case where imageUrls is already a List
-        print('📋 imageUrls is already a List with ${(json['imageUrls'] as List).length} items');
-        processedImageUrls = (json['imageUrls'] as List)
-            .where((url) => url != null && url.toString().isNotEmpty)
+        final rawList = json['imageUrls'] as List;
+        print('📋 imageUrls is already a List with ${rawList.length} items');
+        print('📋 Raw list content: $rawList');
+        
+        // Recursively flatten the list and extract only valid URLs
+        List<String> flattenedUrls = [];
+        
+        void extractUrls(dynamic item) {
+          if (item is String && item.isNotEmpty) {
+            // Clean up the string to remove any JSON artifacts
+            String cleanUrl = item.trim();
+            
+            // Remove JSON array brackets and quotes
+            cleanUrl = cleanUrl.replaceAll(RegExp(r'^[\[\"\s]+|[\]\"\s]+$'), '');
+            
+            // Only add if it looks like a valid URL
+            if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://') || cleanUrl.contains('/uploads/')) {
+              flattenedUrls.add(cleanUrl);
+            }
+          } else if (item is List) {
+            for (var subItem in item) {
+              extractUrls(subItem);
+            }
+          }
+        }
+        
+        for (var item in rawList) {
+          extractUrls(item);
+        }
+        
+        print('📋 Extracted URLs: $flattenedUrls');
+        
+        processedImageUrls = flattenedUrls
             .map((url) {
-              final cleanUrl = url.toString();
+              print('🔗 Processing extracted URL: "$url"');
               // Return URL as-is if it's already complete, otherwise process it
-              if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
-                return cleanUrl;
+              if (url.startsWith('http://') || url.startsWith('https://')) {
+                return url;
               } else {
-                return ImageUtils.getFullImageUrl(cleanUrl);
+                return ImageUtils.getFullImageUrl(url);
               }
             })
             .toList();
@@ -217,6 +247,7 @@ class CreateSalonRequest {
   final double? currentLongitude;
   final bool useCurrentLocation;
   final List<String>? imageUrls; // Add image URLs
+  final String? profilePictureUrl; // Profile picture URL
 
   CreateSalonRequest({
     required this.name,
@@ -234,6 +265,7 @@ class CreateSalonRequest {
     this.currentLongitude,
     this.useCurrentLocation = false,
     this.imageUrls, // Add to constructor
+    this.profilePictureUrl,
   });
   Map<String, dynamic> toJson() {
     return {
@@ -252,6 +284,7 @@ class CreateSalonRequest {
       'currentLongitude': currentLongitude,
       'useCurrentLocation': useCurrentLocation,
       'imageUrls': imageUrls, // Add image URLs to JSON
+      'profilePictureUrl': profilePictureUrl,
     };
   }
 }
@@ -272,6 +305,7 @@ class UpdateSalonRequest {
   final double? latitude;
   final double? longitude;
   final List<String>? imageUrls; // Updated image URLs
+  final String? profilePictureUrl; // Profile picture URL
   final bool isActive;
 
   UpdateSalonRequest({
@@ -290,6 +324,7 @@ class UpdateSalonRequest {
     this.latitude,
     this.longitude,
     this.imageUrls,
+    this.profilePictureUrl,
     required this.isActive,
   });
 
@@ -310,6 +345,7 @@ class UpdateSalonRequest {
       'latitude': latitude,
       'longitude': longitude,
       'imageUrls': imageUrls,
+      'profilePictureUrl': profilePictureUrl,
       'isActive': isActive,
     };
   }
@@ -372,5 +408,64 @@ class SalonService {
     }
     
     return [];
+  }
+
+  // Delete specific images from a salon
+  Future<Map<String, dynamic>> deleteSalonImages(int salonId, List<String> imageUrls) async {
+    print('🗑️ Deleting ${imageUrls.length} images from salon $salonId');
+    print('📤 Images to delete: $imageUrls');
+    
+    final response = await _apiService.delete('/salon/$salonId/images', data: imageUrls);
+    
+    print('📥 Image deletion response: $response');
+    
+    if (response['data'] != null) {
+      return response['data'];
+    }
+    
+    throw Exception('Failed to delete images: ${response['message'] ?? 'Unknown error'}');
+  }
+
+  // Deactivate/Activate a salon
+  Future<SalonDto> toggleSalonStatus(int salonId, bool isActive) async {
+    print('🏢 ${isActive ? "Activating" : "Deactivating"} salon $salonId');
+    
+    // First get the current salon to preserve other data
+    final currentSalon = await getSalonById(salonId);
+    
+    // Create update request with only the status change
+    final updateRequest = UpdateSalonRequest(
+      id: salonId,
+      name: currentSalon.name,
+      description: currentSalon.description,
+      address: currentSalon.address,
+      city: currentSalon.city,
+      state: currentSalon.state,
+      zipCode: currentSalon.zipCode,
+      phoneNumber: currentSalon.phoneNumber,
+      email: currentSalon.email,
+      openingTime: "${currentSalon.openingTime}:00",
+      closingTime: "${currentSalon.closingTime}:00",
+      latitude: currentSalon.latitude,
+      longitude: currentSalon.longitude,
+      imageUrls: currentSalon.imageUrls,
+      profilePictureUrl: currentSalon.profilePictureUrl,
+      isActive: isActive,
+    );
+    
+    return await updateSalon(updateRequest);
+  }
+
+  // Delete a salon permanently
+  Future<void> deleteSalon(int salonId) async {
+    print('🗑️ Permanently deleting salon $salonId');
+    
+    final response = await _apiService.delete('/salon/$salonId');
+    
+    print('📥 Salon deletion response: $response');
+    
+    if (response['success'] != true && response['data'] == null) {
+      throw Exception('Failed to delete salon: ${response['message'] ?? 'Unknown error'}');
+    }
   }
 }

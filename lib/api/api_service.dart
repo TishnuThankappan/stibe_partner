@@ -182,9 +182,9 @@ class ApiService {
   }
 
   // Generic DELETE request
-  Future<dynamic> delete(String endpoint) async {
+  Future<dynamic> delete(String endpoint, {dynamic data}) async {
     try {
-      final response = await _dio.delete(endpoint);
+      final response = await _dio.delete(endpoint, data: data);
       return response.data;
     } on DioException catch (e) {
       _handleError(e);

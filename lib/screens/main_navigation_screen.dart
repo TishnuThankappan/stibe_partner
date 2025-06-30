@@ -4,7 +4,7 @@ import 'package:stibe_partner/screens/analytics/analytics_screen.dart';
 import 'package:stibe_partner/screens/appointments/appointments_screen.dart';
 import 'package:stibe_partner/screens/customers/customers_screen.dart';
 import 'package:stibe_partner/screens/dashboard/dashboard_screen.dart';
-import 'package:stibe_partner/screens/services/services_screen.dart';
+import 'package:stibe_partner/screens/salons/salons_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -20,7 +20,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     const DashboardScreen(),
     const AppointmentsScreen(),
     const CustomersScreen(),
-    const ServicesScreen(),
+    const SalonsScreen(),
     const AnalyticsScreen(),
   ];
   
@@ -28,7 +28,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     'Dashboard',
     'Bookings',
     'Customers',
-    'Services',
+    'Salons',
     'Analytics',
   ];
   
@@ -36,7 +36,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     Icons.dashboard_outlined,
     Icons.calendar_today_outlined,
     Icons.people_outline,
-    Icons.spa_outlined,
+    Icons.store_outlined,
     Icons.analytics_outlined,
   ];
   
@@ -44,7 +44,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     Icons.dashboard,
     Icons.calendar_today,
     Icons.people,
-    Icons.spa,
+    Icons.store,
     Icons.analytics,
   ];
 
@@ -113,7 +113,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   bool _shouldShowFAB() {
-    // Show FAB on bookings, customers, and services screens
+    // Show FAB on bookings, customers, and salons screens
     return _currentIndex == 1 || _currentIndex == 2 || _currentIndex == 3;
   }
 
@@ -172,8 +172,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ),
                 Expanded(
                   child: _buildQuickActionButton(
-                    icon: Icons.spa,
-                    label: 'Add Service',
+                    icon: Icons.store,
+                    label: 'Add Salon',
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => _currentIndex = 3);

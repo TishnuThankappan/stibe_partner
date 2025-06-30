@@ -52,4 +52,9 @@ class ImageUploadService {
   Future<String?> uploadSalonProfileImage(File image) async {
     return await uploadSingleImage(image);
   }
+
+  /// Upload service image
+  Future<String?> uploadServiceImage(File image) async {
+    return await uploadSingleImage(image);
+  }
 }
