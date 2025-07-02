@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
+import 'package:stibe_partner/providers/auth_provider.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/screens/location_test_screen.dart';
 
@@ -555,9 +557,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
-                // TODO: Implement logout
+              onPressed: () async {
+                // Close the dialog
                 Navigator.pop(context);
+                
+                // Show loading indicator
+                _showLoadingDialog();
+                
+                try {
+                  // Get the auth provider and logout
+                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  
+                  // Pop the loading dialog first
+                  Navigator.pop(context);
+                  
+                  // Use the new method that handles navigation and snackbars
+                  await authProvider.logoutAndNavigate(context);
+                } catch (e) {
+                  // Pop the loading dialog
+                  if (context.mounted) Navigator.pop(context);
+                  
+                  // Show error snackbar
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Logout failed: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 4),
+                        action: SnackBarAction(
+                          label: 'DISMISS',
+                          textColor: Colors.white,
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.error,
@@ -566,6 +603,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Logout'),
             ),
           ],
+        );
+      },
+    );
+  }
+  
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text("Logging out...")
+            ],
+          ),
         );
       },
     );

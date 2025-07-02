@@ -8,6 +8,11 @@ import 'package:stibe_partner/constants/app_theme.dart';
 class ApiService {
   late Dio _dio;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  
+  // In-memory cache for better performance
+  Map<String, dynamic>? _userDataCache;
+  String? _authTokenCache;
+  Map<String, String>? _credentialsCache;
 
   static final ApiService _instance = ApiService._internal();
 
@@ -18,8 +23,8 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 10),  // Reduced from 30 seconds
+        receiveTimeout: const Duration(seconds: 10),  // Reduced from 30 seconds
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -38,20 +43,55 @@ class ApiService {
     // Add interceptors
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // Get token from secure storage
-        final token = await _secureStorage.read(key: 'auth_token');
+        final Stopwatch requestStopwatch = Stopwatch()..start();
+        
+        // Get token from cache first, then fall back to secure storage
+        String? token = _authTokenCache;
+        if (token == null) {
+          token = await _secureStorage.read(key: 'auth_token');
+          // Update cache if token was found
+          if (token != null) {
+            _authTokenCache = token;
+          }
+        }
+        
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
+        
+        // Add request ID and timing information
+        options.extra['requestId'] = DateTime.now().millisecondsSinceEpoch.toString();
+        options.extra['requestStartTime'] = requestStopwatch.elapsedMilliseconds;
+        
         return handler.next(options);
       },
       onResponse: (response, handler) {
+        // Calculate response time if request start time is available
+        if (response.requestOptions.extra.containsKey('requestStartTime')) {
+          final startTime = response.requestOptions.extra['requestStartTime'] as int;
+          final endTime = DateTime.now().millisecondsSinceEpoch;
+          final duration = endTime - startTime;
+          
+          if (AppConfig.isDevelopment) {
+            print('⏱️ Request completed in ${duration}ms: ${response.requestOptions.path}');
+          }
+        }
+        
         return handler.next(response);
       },
       onError: (DioException e, handler) async {
         if (e.response?.statusCode == 401) {
-          // Token expired, refresh or logout
-          // Implement token refresh logic here
+          // Token expired or invalid, log the error
+          print('🚫 Authentication error: Token expired or invalid');
+          
+          // Clear both cache and storage
+          _authTokenCache = null;
+          try {
+            await clearAuthToken();
+            print('✅ Auth token cleared after 401 error');
+          } catch (clearError) {
+            print('❌ Error clearing token after 401: $clearError');
+          }
         }
         return handler.next(e);
       },
@@ -90,30 +130,60 @@ class ApiService {
   // Generic POST request
   Future<dynamic> post(String endpoint, {dynamic data}) async {
     try {
-      print('🌐 API POST Request');
-      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
-      print('📤 Data: $data');
+      // Only print detailed logs in development mode
+      if (AppConfig.isDevelopment) {
+        print('🌐 API POST Request');
+        print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+        
+        // Don't log sensitive data like passwords in full
+        final sanitizedData = data is Map ? _sanitizeData(data) : data;
+        print('📤 Data: $sanitizedData');
+      }
       
+      final Stopwatch stopwatch = Stopwatch()..start();
       final response = await _dio.post(
         endpoint,
         data: data,
       );
+      stopwatch.stop();
       
-      print('📥 Response Status: ${response.statusCode}');
-      print('📥 Response Data: ${response.data}');
+      if (AppConfig.isDevelopment) {
+        print('⏱️ Request took: ${stopwatch.elapsedMilliseconds}ms');
+        print('📥 Response Status: ${response.statusCode}');
+      }
       
       return response.data;
     } on DioException catch (e) {
-      print('❌ API Error:');
-      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
-      print('💥 Error Type: ${e.type}');
-      print('💥 Error Message: ${e.message}');
-      print('💥 Response: ${e.response?.data}');
-      print('💥 Status Code: ${e.response?.statusCode}');
+      if (AppConfig.isDevelopment) {
+        print('❌ API Error:');
+        print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+        print('💥 Error Type: ${e.type}');
+        print('💥 Error Message: ${e.message}');
+        print('💥 Response: ${e.response?.data}');
+        print('💥 Status Code: ${e.response?.statusCode}');
+      }
       
       _handleError(e);
       rethrow;
     }
+  }
+  
+  // Sanitize sensitive data for logging
+  dynamic _sanitizeData(Map data) {
+    final sanitized = Map<String, dynamic>.from(data);
+    if (sanitized.containsKey('password')) {
+      sanitized['password'] = '****';
+    }
+    if (sanitized.containsKey('currentPassword')) {
+      sanitized['currentPassword'] = '****';
+    }
+    if (sanitized.containsKey('newPassword')) {
+      sanitized['newPassword'] = '****';
+    }
+    if (sanitized.containsKey('confirmPassword')) {
+      sanitized['confirmPassword'] = '****';
+    }
+    return sanitized;
   }
 
   // Upload file
@@ -141,6 +211,49 @@ class ApiService {
       return response.data;
     } on DioException catch (e) {
       print('❌ API File Upload Error:');
+      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+      print('💥 Error Type: ${e.type}');
+      print('💥 Error Message: ${e.message}');
+      print('💥 Response: ${e.response?.data}');
+      print('💥 Status Code: ${e.response?.statusCode}');
+      
+      _handleError(e);
+      rethrow;
+    }
+  }
+
+  // Upload multiple files
+  Future<dynamic> uploadFiles(String endpoint, List<File> files, {String fieldName = 'files'}) async {
+    try {
+      print('🌐 API MULTIPLE FILE Upload Request');
+      print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
+      print('📁 Files: ${files.length} files');
+      
+      final formData = FormData();
+      
+      for (int i = 0; i < files.length; i++) {
+        formData.files.add(
+          MapEntry(
+            fieldName,
+            await MultipartFile.fromFile(files[i].path),
+          ),
+        );
+      }
+      
+      final response = await _dio.post(
+        endpoint,
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+      
+      print('📥 Response Status: ${response.statusCode}');
+      print('📥 Response Data: ${response.data}');
+      
+      return response.data;
+    } on DioException catch (e) {
+      print('❌ API Multiple File Upload Error:');
       print('🔗 URL: ${_dio.options.baseUrl}$endpoint');
       print('💥 Error Type: ${e.type}');
       print('💥 Error Message: ${e.message}');
@@ -227,12 +340,34 @@ class ApiService {
 
   // Set auth token
   Future<void> setAuthToken(String token) async {
-    await _secureStorage.write(key: 'auth_token', value: token);
+    // Update in-memory cache immediately
+    _authTokenCache = token;
+    
+    // Use write without waiting for the result in non-critical paths
+    _secureStorage.write(key: 'auth_token', value: token);
   }
 
   // Clear auth token
   Future<void> clearAuthToken() async {
-    await _secureStorage.delete(key: 'auth_token');
+    try {
+      // Clear cache immediately
+      _authTokenCache = null;
+      
+      if (AppConfig.isDevelopment) {
+        print('🔑 Clearing auth token from secure storage');
+      }
+      await _secureStorage.delete(key: 'auth_token');
+      
+      if (AppConfig.isDevelopment) {
+        print('✅ Auth token cleared successfully');
+      }
+    } catch (e) {
+      if (AppConfig.isDevelopment) {
+        print('❌ Error clearing auth token: $e');
+      }
+      // Rethrow so callers can handle the error
+      rethrow;
+    }
   }
 
   // For backward compatibility - alias to clearAuthToken
@@ -242,7 +377,18 @@ class ApiService {
 
   // Get stored token
   Future<String?> getStoredToken() async {
-    return await _secureStorage.read(key: 'auth_token');
+    // Return from in-memory cache if available
+    if (_authTokenCache != null) {
+      return _authTokenCache;
+    }
+    
+    // Get from secure storage and update cache
+    final token = await _secureStorage.read(key: 'auth_token');
+    if (token != null) {
+      _authTokenCache = token;
+    }
+    
+    return token;
   }
   
   // For backward compatibility - alias to getStoredToken
@@ -252,21 +398,155 @@ class ApiService {
   
   // Store user data
   Future<void> storeUserData(Map<String, dynamic> userData) async {
+    // Update in-memory cache immediately
+    _userDataCache = userData;
+    
+    // Store in secure storage
     await _secureStorage.write(key: 'user_data', value: json.encode(userData));
   }
   
   // Get stored user data
   Future<Map<String, dynamic>?> getStoredUserData() async {
+    // Return from in-memory cache if available
+    if (_userDataCache != null) {
+      return _userDataCache;
+    }
+    
+    // Get from secure storage and update cache
     final userDataString = await _secureStorage.read(key: 'user_data');
     if (userDataString != null) {
-      return json.decode(userDataString);
+      try {
+        final userData = json.decode(userDataString) as Map<String, dynamic>;
+        _userDataCache = userData;
+        return userData;
+      } catch (e) {
+        print('❌ Error parsing stored user data: $e');
+        return null;
+      }
     }
     return null;
   }
   
   // Clear stored user data
   Future<void> clearStoredUserData() async {
-    await _secureStorage.delete(key: 'user_data');
+    try {
+      // Clear cache immediately
+      _userDataCache = null;
+      
+      print('👤 Clearing user data from secure storage');
+      await _secureStorage.delete(key: 'user_data');
+      print('✅ User data cleared successfully');
+    } catch (e) {
+      print('❌ Error clearing user data: $e');
+      // Rethrow so callers can handle the error
+      rethrow;
+    }
+  }
+
+  // Store credentials for "Remember Me" functionality
+  Future<void> storeCredentials(String email, String password) async {
+    try {
+      print('🔒 Storing credentials for Remember Me');
+      
+      // Update in-memory cache
+      _credentialsCache = {
+        'email': email,
+        'password': password
+      };
+      
+      // Store in secure storage
+      await Future.wait([
+        _secureStorage.write(key: 'remembered_email', value: email),
+        _secureStorage.write(key: 'remembered_password', value: password),
+        _secureStorage.write(key: 'remember_me_enabled', value: 'true')
+      ]);
+      
+      print('✅ Credentials stored successfully');
+    } catch (e) {
+      print('❌ Error storing credentials: $e');
+      rethrow;
+    }
+  }
+  
+  // Get stored credentials
+  Future<Map<String, String>?> getStoredCredentials() async {
+    try {
+      // Return from in-memory cache if available
+      if (_credentialsCache != null) {
+        return _credentialsCache;
+      }
+      
+      final rememberMeEnabled = await _secureStorage.read(key: 'remember_me_enabled');
+      
+      if (rememberMeEnabled == 'true') {
+        // Get credentials in parallel
+        final email = await _secureStorage.read(key: 'remembered_email');
+        final password = await _secureStorage.read(key: 'remembered_password');
+        
+        if (email != null && password != null) {
+          // Update in-memory cache
+          _credentialsCache = {
+            'email': email,
+            'password': password
+          };
+          
+          print('✅ Retrieved stored credentials');
+          return _credentialsCache;
+        }
+      }
+      
+      print('🔍 No stored credentials found or remember me not enabled');
+      return null;
+    } catch (e) {
+      print('❌ Error getting stored credentials: $e');
+      return null;
+    }
+  }
+  
+  // Clear stored credentials
+  Future<void> clearStoredCredentials({bool preserveForRememberMe = false}) async {
+    try {
+      print('🔍 DEBUG clearStoredCredentials - preserveForRememberMe: $preserveForRememberMe');
+      
+      // Clear in-memory cache
+      _credentialsCache = null;
+      
+      if (preserveForRememberMe) {
+        // Check if remember me was enabled
+        final rememberMeEnabled = await _secureStorage.read(key: 'remember_me_enabled');
+        print('🔍 DEBUG Remember me enabled status: $rememberMeEnabled');
+        
+        if (rememberMeEnabled == 'true') {
+          print('🔒 Preserving stored credentials for Remember Me');
+          return; // Skip deleting credentials
+        } else {
+          print('⚠️ DEBUG Remember Me was not previously enabled, not preserving credentials');
+        }
+      } else {
+        print('⚠️ DEBUG preserveForRememberMe is false, clearing credentials');
+      }
+      
+      print('🔓 Clearing stored credentials');
+      await _secureStorage.delete(key: 'remembered_email');
+      await _secureStorage.delete(key: 'remembered_password');
+      await _secureStorage.delete(key: 'remember_me_enabled');
+      print('✅ Stored credentials cleared successfully');
+    } catch (e) {
+      print('❌ Error clearing credentials: $e');
+      rethrow;
+    }
+  }
+
+  // Check if remember me is enabled
+  Future<bool> isRememberMeEnabled() async {
+    try {
+      final status = await _secureStorage.read(key: 'remember_me_enabled');
+      print('🔍 DEBUG isRememberMeEnabled: $status');
+      return status == 'true';
+    } catch (e) {
+      print('❌ Error checking remember me status: $e');
+      return false;
+    }
   }
 
   // Salon Management APIs

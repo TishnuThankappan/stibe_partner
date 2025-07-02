@@ -27,6 +27,26 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = false;
 
   @override
+  void initState() {
+    super.initState();
+    _checkForStoredCredentials();
+  }
+  
+  // Check if we have stored credentials and set Remember Me accordingly
+  Future<void> _checkForStoredCredentials() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final storedCredentials = await authProvider.getStoredCredentials();
+    
+    if (storedCredentials != null) {
+      setState(() {
+        _rememberMe = true;
+        _emailController.text = storedCredentials['email'] ?? '';
+      });
+      print('🔍 DEBUG Found stored credentials, setting Remember Me to true');
+    }
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -37,14 +57,69 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
+      // Start a stopwatch to measure login performance
+      final Stopwatch loginStopwatch = Stopwatch()..start();
+      print('⏱️ Login button pressed at ${loginStopwatch.elapsedMilliseconds}ms');
+      
+      print('🔍 DEBUG LoginScreen._login - rememberMe: $_rememberMe');
+      
+      // Show a loading indicator immediately to improve perceived performance
+      setState(() {
+        // The loading state will be managed by the authProvider, 
+        // but we can update the UI immediately
+      });
+      print('⏱️ Updated UI state at ${loginStopwatch.elapsedMilliseconds}ms');
+      
       final success = await authProvider.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
+        rememberMe: _rememberMe,
       );
       
+      print('⏱️ Login process completed in ${loginStopwatch.elapsedMilliseconds}ms');
+      
       if (success && mounted) {
+        // Call the success callback which will navigate to the dashboard
+        print('⏱️ Calling onLoginSuccess at ${loginStopwatch.elapsedMilliseconds}ms');
         widget.onLoginSuccess();
       }
+    }
+  }
+
+  // Debug function to toggle remember me storage
+  // This will be removed in production
+  Future<void> _debugCheckRememberMe() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final credentials = await authProvider.getStoredCredentials();
+    
+    // Show current status
+    if (credentials != null) {
+      final snackBar = SnackBar(
+        content: Text('Debug: Remember Me is ENABLED (${credentials['email']})'),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'CLEAR',
+          textColor: Colors.white,
+          onPressed: () async {
+            await authProvider.logoutAndNavigate(context, preserveRememberMe: false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Debug: Remember Me credentials cleared'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          },
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Debug: Remember Me is NOT enabled'),
+          backgroundColor: Colors.grey,
+        ),
+      );
     }
   }
 
@@ -181,14 +256,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               setState(() {
                                 _rememberMe = value ?? false;
                               });
+                              // Add debug print
+                              print('🔍 DEBUG Remember Me checkbox toggled: $_rememberMe');
                             },
                             activeColor: AppColors.primary,
                           ),
-                          const Text(
-                            'Remember me',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _rememberMe = !_rememberMe;
+                              });
+                              print('🔍 DEBUG Remember Me text tapped: $_rememberMe');
+                            },
+                            child: const Text(
+                              'Remember me',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ],
@@ -222,6 +307,28 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _login,
                     isLoading: authProvider.isLoading,
                   ),
+                  
+                  // Debug button - will be removed in production
+                  if (AppConfig.isDevelopment) ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _debugCheckRememberMe,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'DEBUG: Check Remember Me Status',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   
                   const SizedBox(height: 24),
                   

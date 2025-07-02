@@ -55,22 +55,7 @@ class DotNetAuthService {
     throw Exception(response['message'] ?? 'Login failed');
   }
 
-  // Login with Google
-  Future<User> googleSignIn({required String idToken}) async {
-    final response = await _apiService.post('/auth/google-sign-in', data: {
-      'idToken': idToken,
-    });
-
-    if (response['successful'] == true && response['data'] != null) {
-      final data = response['data'];
-      if (data['token'] != null) {
-        await _apiService.setAuthToken(data['token']);
-      }
-      return User.fromJson(data['user'] ?? data);
-    }
-
-    throw Exception(response['message'] ?? 'Google sign-in failed');
-  }
+  // Google OAuth functionality has been removed
 
   // Verify email
   Future<bool> verifyEmail({required String email, required String token}) async {

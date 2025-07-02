@@ -40,39 +40,77 @@ class AuthService {
   Future<User> login({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
+    final Stopwatch loginStopwatch = Stopwatch()..start();
     print('🔐 LOGIN ATTEMPT');
-    print('📧 Email: $email');
-    print('🔗 URL: ${AppConstants.baseUrl}/auth/login');
+    
+    // Only print detailed logs in development mode
+    if (AppConfig.isDevelopment) {
+      print('📧 Email: $email');
+      print('🔑 Remember Me: $rememberMe');
+      print('🔗 URL: ${AppConstants.baseUrl}/auth/login');
+    }
     
     final loginData = {
       'email': email,
       'password': password,
     };
-    print('📤 Request Data: $loginData');
     
+    print('⏱️ Starting API request at ${loginStopwatch.elapsedMilliseconds}ms');
     final response = await _apiService.post('/auth/login', data: loginData);
+    print('⏱️ API request completed at ${loginStopwatch.elapsedMilliseconds}ms');
     
-    print('📥 Response: $response');
-
-    // Save token (from .NET API response structure)
+    // Start processing response as early as possible
     if (response['data'] != null) {
       final data = response['data'];
-      print('✅ Login successful - Token received: ${data['token'] != null}');
-      if (data['token'] != null) {
-        await _apiService.setAuthToken(data['token']);
-      }
-      
-      // Store user data for later use
+      final token = data['token'];
       final userData = data['user'] ?? data;
-      await _apiService.storeUserData(userData);
-      print('💾 User data stored: $userData');
       
-      return User.fromJson(userData);
+      // Create a User object early to avoid delays - this is synchronous and fast
+      final user = User.fromJson(userData);
+      print('⏱️ User object created at ${loginStopwatch.elapsedMilliseconds}ms');
+      
+      // Launch storage operations in parallel and don't await them
+      // This allows us to return the user object immediately
+      _startBackgroundStorageOperations(token, userData, email, password, rememberMe);
+      
+      print('⏱️ Login completed at ${loginStopwatch.elapsedMilliseconds}ms');
+      return user;
     }
 
-    print('❌ Login failed - No data in response');
-    throw Exception('Login failed');
+    throw Exception('Login failed: Invalid response from server');
+  }
+  
+  // Handle storage operations in the background
+  void _startBackgroundStorageOperations(
+    String? token, 
+    Map<String, dynamic> userData, 
+    String email, 
+    String password, 
+    bool rememberMe
+  ) {
+    // Run storage operations in a fire-and-forget manner
+    Future.wait([
+      // Only store token if it exists
+      if (token != null) _apiService.setAuthToken(token),
+      
+      // Store user data
+      _apiService.storeUserData(userData),
+      
+      // Handle remember me
+      if (rememberMe) 
+        _apiService.storeCredentials(email, password)
+      else 
+        _apiService.clearStoredCredentials()
+    ]).then((_) {
+      if (AppConfig.isDevelopment) {
+        print('✅ Background storage operations completed');
+      }
+    }).catchError((error) {
+      print('❌ Error during background storage: $error');
+      // We don't rethrow here since this is happening in the background
+    });
   }
 
   // Verify email
@@ -87,41 +125,60 @@ class AuthService {
 
   // Get user profile
   Future<User> getProfile() async {
+    final Stopwatch profileStopwatch = Stopwatch()..start();
+    print('⏱️ getProfile started');
+    
+    User? user;
+    
+    // Try getting user from API and local storage in parallel
     try {
-      // First try using the /auth/profile endpoint
-      final response = await _apiService.get('/auth/profile');
+      // First try to get user data from storage (faster)
+      final storedUserDataFuture = _apiService.getStoredUserData();
       
-      print('📋 Get Profile Response:');
-      print('  - Status: ${response['success']}');
-      print('  - Message: ${response['message']}');
+      // Simultaneously request fresh data from API
+      final apiFuture = _apiService.get('/auth/profile');
       
-      if (response['data'] != null) {
-        print('  - User data: ${response['data']}');
-        print('  - Profile image from API: ${response['data']['profileImage'] ?? response['data']['profilePictureUrl']}');
+      // Wait for both operations with a timeout
+      final results = await Future.wait([
+        storedUserDataFuture.timeout(const Duration(seconds: 2), 
+          onTimeout: () => null),
+        apiFuture.timeout(const Duration(seconds: 5), 
+          onTimeout: () => {'success': false, 'message': 'API timeout'})
+      ]);
+      
+      final storedUserData = results[0];
+      final apiResponse = results[1];
+      
+      // First try to use API response if available
+      if (apiResponse != null && apiResponse['data'] != null) {
+        print('⏱️ Using API profile data at ${profileStopwatch.elapsedMilliseconds}ms');
+        user = User.fromJson(apiResponse['data']);
         
-        final user = User.fromJson(response['data']);
-        print('  - Processed profile image: ${user.profileImage}');
-        print('  - Formatted profile image: ${user.formattedProfileImage}');
+        // Store updated user data in background
+        _apiService.storeUserData(apiResponse['data']);
         
+        print('⏱️ API profile data processed at ${profileStopwatch.elapsedMilliseconds}ms');
+        return user;
+      }
+      
+      // Fall back to stored data if API failed or timed out
+      if (storedUserData != null) {
+        print('⏱️ Using cached profile data at ${profileStopwatch.elapsedMilliseconds}ms');
+        user = User.fromJson(storedUserData);
         return user;
       }
     } catch (e) {
-      print('Error fetching profile: $e');
-      // Fall back to using stored user data from login if /auth/profile endpoint fails
-    }
-    
-    // As a fallback, use the stored user data from shared preferences
-    try {
-      final userData = await _apiService.getStoredUserData();
-      if (userData != null) {
-        print('📋 Using stored user data: $userData');
-        return User.fromJson(userData);
+      print('Error in getProfile: $e');
+      
+      // If we have a partially populated user from one of the sources, use it
+      if (user != null) {
+        print('⏱️ Returning partial user data at ${profileStopwatch.elapsedMilliseconds}ms');
+        return user;
       }
-    } catch (e) {
-      print('Error fetching stored user data: $e');
     }
     
-    throw Exception('Failed to get profile');
+    // If we get here, both methods failed
+    throw Exception('Failed to get user profile data');
   }
 
   // Forgot password
@@ -155,10 +212,47 @@ class AuthService {
   }
 
   // Logout
-  Future<void> logout() async {
-    await _apiService.clearAuthToken();
-    await _apiService.clearStoredUserData();
-    print('🚪 User logged out - cleared token and user data');
+  Future<void> logout({bool preserveRememberMe = true}) async {
+    print('🚪 Logout process initiated');
+    print('🔍 DEBUG AuthService.logout - preserveRememberMe: $preserveRememberMe');
+    
+    try {
+      // First check if Remember Me is actually enabled before we try to preserve it
+      final rememberMeStatus = await _apiService.getStoredCredentials();
+      final rememberMeEnabled = rememberMeStatus != null;
+      
+      print('🔍 DEBUG Actual Remember Me status before logout: $rememberMeEnabled');
+      
+      // Only preserve if both the parameter is true AND Remember Me is actually enabled
+      final shouldPreserveCredentials = preserveRememberMe && rememberMeEnabled;
+      
+      // Skip server-side logout since the endpoint doesn't exist in the API
+      // Just handle the client-side logout process
+      
+      // To avoid any dashboard visibility after logout, clear everything in this order:
+      
+      // 1. First clear local token storage - this will prevent any API calls from working
+      await _apiService.clearAuthToken();
+      print('✅ Auth token cleared');
+      
+      // 2. Clear stored user data
+      await _apiService.clearStoredUserData();
+      print('✅ User data cleared');
+      
+      // 3. Handle stored credentials from "Remember Me" based on the preserveRememberMe flag
+      if (shouldPreserveCredentials) {
+        print('🔒 Remember Me credentials preserved for next login');
+      } else {
+        await _apiService.clearStoredCredentials(preserveForRememberMe: false);
+        print('✅ Stored credentials cleared - preserveRememberMe=$preserveRememberMe, rememberMeEnabled=$rememberMeEnabled');
+      }
+      
+      // Clear any other local storage related to user session if needed
+      print('🚪 User successfully logged out - all data cleared');
+    } catch (e) {
+      print('❌ Error during logout process: $e');
+      rethrow;
+    }
   }
 
   // Check if user is logged in
@@ -243,5 +337,15 @@ class AuthService {
     }
     
     throw Exception('Failed to upload profile image');
+  }
+
+  // Get stored credentials (for Remember Me)
+  Future<Map<String, String>?> getStoredCredentials() async {
+    return await _apiService.getStoredCredentials();
+  }
+  
+  // Clear stored credentials
+  Future<void> clearStoredCredentials({bool preserveForRememberMe = false}) async {
+    await _apiService.clearStoredCredentials(preserveForRememberMe: preserveForRememberMe);
   }
 }

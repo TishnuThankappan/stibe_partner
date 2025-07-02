@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:stibe_partner/api/api_service.dart';
 import 'package:stibe_partner/utils/image_utils.dart';
 
@@ -67,6 +68,12 @@ class ServiceDto {
   final bool requiresStaffAssignment;
   final int bufferTimeBeforeMinutes;
   final int bufferTimeAfterMinutes;
+  
+  // Enhanced fields matching API
+  final double? offerPrice;
+  final String? productsUsed;
+  final List<String>? serviceImages;
+  
   final List<String> tags;
   final Map<String, dynamic>? metadata;
   final double? discountPercentage;
@@ -92,6 +99,9 @@ class ServiceDto {
     required this.requiresStaffAssignment,
     required this.bufferTimeBeforeMinutes,
     required this.bufferTimeAfterMinutes,
+    this.offerPrice,
+    this.productsUsed,
+    this.serviceImages,
     this.tags = const [],
     this.metadata,
     this.discountPercentage,
@@ -119,6 +129,11 @@ class ServiceDto {
       requiresStaffAssignment: json['requiresStaffAssignment'] ?? true,
       bufferTimeBeforeMinutes: json['bufferTimeBeforeMinutes'] ?? 0,
       bufferTimeAfterMinutes: json['bufferTimeAfterMinutes'] ?? 0,
+      offerPrice: json['offerPrice']?.toDouble(),
+      productsUsed: json['productsUsed'],
+      serviceImages: json['serviceImages'] != null 
+          ? List<String>.from(json['serviceImages']).map((url) => ImageUtils.getFullImageUrl(url)).toList()
+          : null,
       tags: json['tags'] != null ? List<String>.from(json['tags']) : [],
       metadata: json['metadata'],
       discountPercentage: json['discountPercentage']?.toDouble(),
@@ -147,6 +162,9 @@ class ServiceDto {
       'requiresStaffAssignment': requiresStaffAssignment,
       'bufferTimeBeforeMinutes': bufferTimeBeforeMinutes,
       'bufferTimeAfterMinutes': bufferTimeAfterMinutes,
+      'offerPrice': offerPrice,
+      'productsUsed': productsUsed,
+      'serviceImages': serviceImages,
       'tags': tags,
       'metadata': metadata,
       'discountPercentage': discountPercentage,
@@ -159,7 +177,8 @@ class ServiceDto {
   }
 
   // Helper methods
-  String get formattedPrice => '\$${price.toStringAsFixed(2)}';
+  String get formattedPrice => '₹${price.toStringAsFixed(2)}';
+  String? get formattedOfferPrice => offerPrice != null ? '₹${offerPrice!.toStringAsFixed(2)}' : null;
   String get formattedDuration {
     final hours = durationInMinutes ~/ 60;
     final minutes = durationInMinutes % 60;
@@ -255,6 +274,12 @@ class CreateServiceRequest {
   final bool requiresStaffAssignment;
   final int bufferTimeBeforeMinutes;
   final int bufferTimeAfterMinutes;
+  
+  // Enhanced fields matching API
+  final double? offerPrice;
+  final String? productsUsed;
+  final List<String>? serviceImages;
+  
   final List<String> tags;
   final Map<String, dynamic>? metadata;
   final double? discountPercentage;
@@ -271,6 +296,9 @@ class CreateServiceRequest {
     this.requiresStaffAssignment = true,
     this.bufferTimeBeforeMinutes = 0,
     this.bufferTimeAfterMinutes = 0,
+    this.offerPrice,
+    this.productsUsed,
+    this.serviceImages,
     this.tags = const [],
     this.metadata,
     this.discountPercentage,
@@ -289,6 +317,9 @@ class CreateServiceRequest {
       'requiresStaffAssignment': requiresStaffAssignment,
       'bufferTimeBeforeMinutes': bufferTimeBeforeMinutes,
       'bufferTimeAfterMinutes': bufferTimeAfterMinutes,
+      'offerPrice': offerPrice,
+      'productsUsed': productsUsed,
+      'serviceImages': serviceImages,
       'tags': tags,
       'metadata': metadata,
       'discountPercentage': discountPercentage,
@@ -310,6 +341,12 @@ class UpdateServiceRequest {
   final bool? requiresStaffAssignment;
   final int? bufferTimeBeforeMinutes;
   final int? bufferTimeAfterMinutes;
+  
+  // Enhanced fields
+  final double? offerPrice;
+  final String? productsUsed;
+  final List<String>? serviceImages;
+  
   final List<String>? tags;
   final Map<String, dynamic>? metadata;
   final double? discountPercentage;
@@ -328,6 +365,9 @@ class UpdateServiceRequest {
     this.requiresStaffAssignment,
     this.bufferTimeBeforeMinutes,
     this.bufferTimeAfterMinutes,
+    this.offerPrice,
+    this.productsUsed,
+    this.serviceImages,
     this.tags,
     this.metadata,
     this.discountPercentage,
@@ -347,6 +387,9 @@ class UpdateServiceRequest {
     if (requiresStaffAssignment != null) data['requiresStaffAssignment'] = requiresStaffAssignment;
     if (bufferTimeBeforeMinutes != null) data['bufferTimeBeforeMinutes'] = bufferTimeBeforeMinutes;
     if (bufferTimeAfterMinutes != null) data['bufferTimeAfterMinutes'] = bufferTimeAfterMinutes;
+    if (offerPrice != null) data['offerPrice'] = offerPrice;
+    if (productsUsed != null) data['productsUsed'] = productsUsed;
+    if (serviceImages != null) data['serviceImages'] = serviceImages;
     if (tags != null) data['tags'] = tags;
     if (metadata != null) data['metadata'] = metadata;
     if (discountPercentage != null) data['discountPercentage'] = discountPercentage;
@@ -507,22 +550,28 @@ class ServiceManagementService {
     return [];
   }
 
-  // Get popular services
-  Future<List<ServiceDto>> getPopularServices(int salonId) async {
-    return getSalonServices(salonId, sortBy: 'popularity', ascending: false);
-  }
-
-  // Get service by ID
-  Future<ServiceDto> getServiceById(int salonId, int serviceId) async {
-    print('🔧 Getting service $serviceId for salon $salonId');
+  // AI-based service categorization
+  Future<int?> suggestServiceCategory(int salonId, String serviceName, String serviceDescription) async {
+    print('🧠 Suggesting category for service: $serviceName');
     
-    final response = await _apiService.get('/salon/$salonId/service/$serviceId');
-    
-    if (response['data'] != null) {
-      return ServiceDto.fromJson(response['data']);
+    try {
+      final response = await _apiService.post('/salon/$salonId/service/suggest-category', data: {
+        'name': serviceName,
+        'description': serviceDescription,
+      });
+      
+      print('📥 Category suggestion response: $response');
+      
+      if (response['data'] != null && response['data']['categoryId'] != null) {
+        return response['data']['categoryId'] as int;
+      }
+      
+      return null;
+    } catch (e) {
+      print('❌ Error suggesting category: $e');
+      // Return null instead of throwing - we don't want to block service creation if this fails
+      return null;
     }
-    
-    throw Exception('Failed to get service');
   }
 
   // Create new service
@@ -530,15 +579,39 @@ class ServiceManagementService {
     print('🔧 Creating service for salon $salonId');
     print('📤 Request: ${request.toJson()}');
     
-    final response = await _apiService.post('/salon/$salonId/service', data: request.toJson());
-    
-    print('📥 Service creation response: $response');
-    
-    if (response['data'] != null) {
-      return ServiceDto.fromJson(response['data']);
+    try {
+      final response = await _apiService.post('/salon/$salonId/service', data: request.toJson());
+      
+      print('📥 Service creation response: $response');
+      
+      if (response['data'] != null) {
+        return ServiceDto.fromJson(response['data']);
+      }
+      
+      // Check if the response indicates an error
+      if (response['message'] != null) {
+        throw Exception(response['message']);
+      }
+      
+      throw Exception('Failed to create service: No data returned');
+    } catch (e) {
+      print('❌ Error creating service: $e');
+      
+      // Re-throw with more specific error information
+      if (e.toString().contains('401')) {
+        throw Exception('Authentication failed. Please log in again.');
+      } else if (e.toString().contains('403')) {
+        throw Exception('You don\'t have permission to create services for this salon.');
+      } else if (e.toString().contains('404')) {
+        throw Exception('Salon not found.');
+      } else if (e.toString().contains('400')) {
+        throw Exception('Invalid service data. Please check all fields.');
+      } else if (e.toString().contains('500')) {
+        throw Exception('Server error. Please try again later.');
+      }
+      
+      throw Exception('Failed to create service: ${e.toString()}');
     }
-    
-    throw Exception('Failed to create service: ${response['message'] ?? 'Unknown error'}');
   }
 
   // Update service
@@ -608,29 +681,85 @@ class ServiceManagementService {
 
   // ===================== SERVICE CATEGORIES =====================
 
-  // Get all categories for a salon
-  Future<List<ServiceCategoryDto>> getSalonCategories(int salonId, {bool? isActive}) async {
-    print('🔧 Getting categories for salon $salonId');
+  // Get service categories for a salon
+  Future<List<ServiceCategoryDto>> getServiceCategories(int salonId, {
+    bool includeInactive = false,
+    bool includeServiceCount = false,
+  }) async {
+    print('🔧 Getting service categories for salon $salonId');
     
-    final queryParams = <String, dynamic>{};
-    if (isActive != null) queryParams['isActive'] = isActive;
+    final queryParams = <String, dynamic>{
+      'includeInactive': includeInactive,
+      'includeServiceCount': includeServiceCount,
+    };
     
-    final response = await _apiService.get('/salon/$salonId/service-category', queryParams: queryParams);
+    final response = await _apiService.get(
+      '/salon/$salonId/service-category',
+      queryParams: queryParams,
+    );
     
     if (response['data'] != null) {
-      return (response['data'] as List)
-          .map((category) => ServiceCategoryDto.fromJson(category))
-          .toList();
+      final List<dynamic> categoriesJson = response['data'];
+      return categoriesJson.map((json) => ServiceCategoryDto.fromJson(json)).toList();
     }
     
     return [];
   }
 
-  // Create service category
-  Future<ServiceCategoryDto> createServiceCategory(int salonId, CreateServiceCategoryRequest request) async {
-    print('🔧 Creating service category for salon $salonId');
+  // Alias for backward compatibility
+  Future<List<ServiceCategoryDto>> getSalonCategories(int salonId, {
+    bool includeInactive = false,
+    bool includeServiceCount = false,
+  }) async {
+    return getServiceCategories(
+      salonId,
+      includeInactive: includeInactive,
+      includeServiceCount: includeServiceCount,
+    );
+  }
+
+  // Get service category by ID
+  Future<ServiceCategoryDto> getServiceCategoryById(int salonId, int categoryId, {
+    bool includeServices = false,
+  }) async {
+    print('🔧 Getting service category $categoryId for salon $salonId');
     
-    final response = await _apiService.post('/salon/$salonId/service-category', data: request.toJson());
+    final queryParams = <String, dynamic>{
+      'includeServices': includeServices,
+    };
+    
+    final response = await _apiService.get(
+      '/salon/$salonId/service-category/$categoryId',
+      queryParams: queryParams,
+    );
+    
+    if (response['data'] != null) {
+      return ServiceCategoryDto.fromJson(response['data']);
+    }
+    
+    throw Exception('Failed to get service category');
+  }
+
+  // Create service category
+  Future<ServiceCategoryDto> createServiceCategory(int salonId, {
+    required String name,
+    required String description,
+    String? iconUrl,
+    bool isActive = true,
+  }) async {
+    print('🔧 Creating service category for salon $salonId: $name');
+    
+    final requestData = {
+      'name': name,
+      'description': description,
+      'iconUrl': iconUrl,
+      'isActive': isActive,
+    };
+    
+    final response = await _apiService.post(
+      '/salon/$salonId/service-category',
+      data: requestData,
+    );
     
     if (response['data'] != null) {
       return ServiceCategoryDto.fromJson(response['data']);
@@ -640,18 +769,36 @@ class ServiceManagementService {
   }
 
   // Update service category
-  Future<ServiceCategoryDto> updateServiceCategory(int salonId, int categoryId, Map<String, dynamic> updates) async {
-    final response = await _apiService.put('/salon/$salonId/service-category/$categoryId', data: updates);
+  Future<ServiceCategoryDto> updateServiceCategory(int salonId, int categoryId, {
+    String? name,
+    String? description,
+    String? iconUrl,
+    bool? isActive,
+  }) async {
+    print('🔧 Updating service category $categoryId for salon $salonId');
+    
+    final requestData = <String, dynamic>{};
+    if (name != null) requestData['name'] = name;
+    if (description != null) requestData['description'] = description;
+    if (iconUrl != null) requestData['iconUrl'] = iconUrl;
+    if (isActive != null) requestData['isActive'] = isActive;
+    
+    final response = await _apiService.put(
+      '/salon/$salonId/service-category/$categoryId',
+      data: requestData,
+    );
     
     if (response['data'] != null) {
       return ServiceCategoryDto.fromJson(response['data']);
     }
     
-    throw Exception('Failed to update service category');
+    throw Exception('Failed to update service category: ${response['message'] ?? 'Unknown error'}');
   }
 
   // Delete service category
   Future<void> deleteServiceCategory(int salonId, int categoryId) async {
+    print('🔧 Deleting service category $categoryId for salon $salonId');
+    
     await _apiService.delete('/salon/$salonId/service-category/$categoryId');
   }
 
@@ -758,4 +905,178 @@ class ServiceManagementService {
     return services;
   }
 
+  // Get service by ID
+  Future<ServiceDto> getServiceById(int salonId, int serviceId) async {
+    print('🔧 Getting service $serviceId from salon $salonId');
+    
+    try {
+      final response = await _apiService.get('/salon/$salonId/service/$serviceId');
+      
+      print('📥 Service details response: $response');
+      
+      if (response['data'] != null) {
+        return ServiceDto.fromJson(response['data']);
+      }
+      
+      // Check if the response indicates an error
+      if (response['message'] != null) {
+        throw Exception(response['message']);
+      }
+      
+      throw Exception('Failed to get service: No data returned');
+    } catch (e) {
+      print('❌ Error getting service: $e');
+      
+      // Re-throw with more specific error information
+      if (e.toString().contains('401')) {
+        throw Exception('Authentication failed. Please log in again.');
+      } else if (e.toString().contains('403')) {
+        throw Exception('You don\'t have permission to access this service.');
+      } else if (e.toString().contains('404')) {
+        throw Exception('Service not found.');
+      } else if (e.toString().contains('500')) {
+        throw Exception('Server error. Please try again later.');
+      }
+      
+      throw Exception('Failed to get service: ${e.toString()}');
+    }
+  }
+
+  // ===================== IMAGE UPLOAD =====================
+
+  // Upload service profile image
+  Future<String> uploadServiceProfileImage(int salonId, File imageFile) async {
+    print('🖼️ Uploading service profile image for salon $salonId');
+    
+    try {
+      final response = await _apiService.uploadFile(
+        '/salon/$salonId/service/upload-profile-image',
+        imageFile,
+        fieldName: 'image',
+      );
+      
+      print('📥 Image upload response: $response');
+      
+      if (response['data'] != null && response['data']['imageUrl'] != null) {
+        return response['data']['imageUrl'] as String;
+      }
+      
+      // Check if the response indicates an error
+      if (response['message'] != null) {
+        throw Exception(response['message']);
+      }
+      
+      throw Exception('Failed to upload service profile image: No URL returned');
+    } catch (e) {
+      print('❌ Error uploading service profile image: $e');
+      
+      // Re-throw with more specific error information
+      if (e.toString().contains('401')) {
+        throw Exception('Authentication failed. Please log in again.');
+      } else if (e.toString().contains('403')) {
+        throw Exception('You don\'t have permission to upload images for this salon.');
+      } else if (e.toString().contains('400')) {
+        throw Exception('Invalid image file. Please select a valid JPG, PNG, GIF, or WebP image under 5MB.');
+      } else if (e.toString().contains('500')) {
+        throw Exception('Server error. Please try again later.');
+      }
+      
+      throw Exception('Failed to upload service profile image: ${e.toString()}');
+    }
+  }
+
+  // Upload multiple service gallery images
+  Future<List<String>> uploadServiceGalleryImages(int salonId, List<File> imageFiles) async {
+    print('🖼️ Uploading ${imageFiles.length} service gallery images for salon $salonId');
+    print('📁 Image files: ${imageFiles.map((f) => f.path).toList()}');
+    
+    try {
+      final response = await _apiService.uploadFiles(
+        '/salon/$salonId/service/upload-gallery-images',
+        imageFiles,
+        fieldName: 'images',
+      );
+      
+      print('📥 Gallery images upload response: $response');
+      print('📥 Response type: ${response.runtimeType}');
+      
+      if (response != null) {
+        // Handle different response structures
+        if (response is Map<String, dynamic>) {
+          if (response['data'] != null && response['data']['imageUrls'] != null) {
+            final urls = List<String>.from(response['data']['imageUrls']);
+            print('✅ Gallery images uploaded successfully: $urls');
+            return urls;
+          } else if (response['imageUrls'] != null) {
+            final urls = List<String>.from(response['imageUrls']);
+            print('✅ Gallery images uploaded successfully (direct): $urls');
+            return urls;
+          } else if (response['data'] != null && response['data'] is List) {
+            final urls = List<String>.from(response['data']);
+            print('✅ Gallery images uploaded successfully (list): $urls');
+            return urls;
+          }
+        } else if (response is List) {
+          final urls = List<String>.from(response);
+          print('✅ Gallery images uploaded successfully (raw list): $urls');
+          return urls;
+        }
+      }
+      
+      // Check if the response indicates an error
+      if (response != null && response['message'] != null) {
+        throw Exception(response['message']);
+      }
+      
+      throw Exception('Failed to upload service gallery images: No URLs returned. Response: $response');
+    } catch (e) {
+      print('❌ Error uploading service gallery images: $e');
+      
+      // Try fallback method for 404 or if endpoint doesn't exist
+      if (e.toString().contains('404') || e.toString().contains('Not Found')) {
+        print('🔄 Gallery upload endpoint not found. Trying fallback method...');
+        try {
+          return await uploadServiceGalleryImagesIndividually(salonId, imageFiles);
+        } catch (fallbackError) {
+          print('❌ Fallback method also failed: $fallbackError');
+          throw Exception('Failed to upload gallery images using both methods: $fallbackError');
+        }
+      }
+      
+      // Re-throw with more specific error information
+      if (e.toString().contains('401')) {
+        throw Exception('Authentication failed. Please log in again.');
+      } else if (e.toString().contains('403')) {
+        throw Exception('You don\'t have permission to upload images for this salon.');
+      } else if (e.toString().contains('400')) {
+        throw Exception('Invalid image files. Please select valid JPG, PNG, GIF, or WebP images under 5MB each (max 10 images).');
+      } else if (e.toString().contains('500')) {
+        throw Exception('Server error. Please try again later.');
+      }
+      
+      throw Exception('Failed to upload service gallery images: ${e.toString()}');
+    }
+  }
+
+  // Fallback method: Upload gallery images one by one using profile image endpoint
+  Future<List<String>> uploadServiceGalleryImagesIndividually(int salonId, List<File> imageFiles) async {
+    print('🖼️ Fallback: Uploading ${imageFiles.length} gallery images individually for salon $salonId');
+    
+    final List<String> uploadedUrls = [];
+    
+    for (int i = 0; i < imageFiles.length; i++) {
+      try {
+        print('📷 Uploading gallery image ${i + 1}/${imageFiles.length}: ${imageFiles[i].path}');
+        final url = await uploadServiceProfileImage(salonId, imageFiles[i]);
+        uploadedUrls.add(url);
+        print('✅ Gallery image ${i + 1} uploaded: $url');
+      } catch (e) {
+        print('❌ Failed to upload gallery image ${i + 1}: $e');
+        // Continue with other images even if one fails
+      }
+    }
+    
+    print('✅ Uploaded ${uploadedUrls.length}/${imageFiles.length} gallery images individually');
+    return uploadedUrls;
+  }
 }

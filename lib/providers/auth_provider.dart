@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:stibe_partner/api/auth_service.dart';
 import 'package:stibe_partner/api/salon_service.dart';
+import 'package:stibe_partner/main.dart'; // For AuthenticationWrapper
 import 'package:stibe_partner/models/user_model.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -25,6 +27,30 @@ class AuthProvider extends ChangeNotifier {
       if (isLoggedIn) {
         _user = await _authService.getProfile();
         _isAuthenticated = true;
+      } else {
+        // Check for stored credentials from "Remember Me"
+        final storedCredentials = await _authService.getStoredCredentials();
+        if (storedCredentials != null) {
+          print('🔑 Found stored credentials - attempting auto-login');
+          
+          // Try to login with stored credentials
+          try {
+            _user = await _authService.login(
+              email: storedCredentials['email']!,
+              password: storedCredentials['password']!,
+              // Keep remember me enabled
+              rememberMe: true, 
+            );
+            
+            _isAuthenticated = true;
+            print('✅ Auto-login successful with stored credentials');
+          } catch (autoLoginError) {
+            print('❌ Auto-login failed: $autoLoginError');
+            // Clear invalid credentials
+            await _authService.clearStoredCredentials();
+            _isAuthenticated = false;
+          }
+        }
       }
     } catch (e) {
       _setError(e.toString());
@@ -72,39 +98,120 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> login({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     _setLoading(true);
     _clearError();
     
+    final Stopwatch loginStopwatch = Stopwatch()..start();
+    print('� AuthProvider.login started');
+    print('�🔍 DEBUG AuthProvider.login - rememberMe: $rememberMe');
+    
     try {
+      // Preemptively set the user as authenticated to speed up UI transitions
+      // We'll revert this if the login fails
+      _isAuthenticated = true;
+      notifyListeners();
+      print('⏱️ Preemptively set authenticated at ${loginStopwatch.elapsedMilliseconds}ms');
+      
+      // Actually perform the login
       _user = await _authService.login(
         email: email,
         password: password,
+        rememberMe: rememberMe,
       );
       
-      _isAuthenticated = true;
+      print('⏱️ Login completed at ${loginStopwatch.elapsedMilliseconds}ms');
       return true;
     } catch (e) {
+      // Revert the authentication status since login failed
+      _isAuthenticated = false;
       _setError(e.toString());
+      print('❌ Login failed: $e');
       return false;
     } finally {
       _setLoading(false);
+      notifyListeners();
+      print('⏱️ AuthProvider.login completed in ${loginStopwatch.elapsedMilliseconds}ms');
     }
   }
 
-  // Logout
-  Future<void> logout() async {
+  // Logout and navigate to login screen
+  Future<void> logoutAndNavigate(BuildContext context, {bool preserveRememberMe = true}) async {
     _setLoading(true);
     _clearError();
     
     try {
-      await _authService.logout();
+      print('🔐 Logout initiated');
+      print('🔍 DEBUG AuthProvider.logoutAndNavigate - preserveRememberMe: $preserveRememberMe');
+      
+      await _authService.logout(preserveRememberMe: preserveRememberMe);
+      
+      // Clear all user-related data
       _user = null;
       _isAuthenticated = false;
+      print('✅ User state cleared successfully');
+      
+      // Show success snackbar
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              preserveRememberMe 
+                ? 'Successfully logged out (Remember Me preserved)'
+                : 'Successfully logged out'
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Use pushAndRemoveUntil to clear all routes and start fresh
+      if (context.mounted) {
+        print('🧭 Navigating to login screen after logout');
+        
+        // Make sure authenticated is false BEFORE navigating
+        _isAuthenticated = false;
+        notifyListeners();
+        
+        // IMPORTANT: First pop all routes to eliminate the dashboard from appearing
+        // Then push a new route with the AuthenticationWrapper
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => const AuthenticationWrapper(),
+          ),
+          // Remove all existing routes
+          (route) => false,
+        );
+      }
     } catch (e) {
       _setError(e.toString());
+      print('❌ Error during logout: $e');
+      // Even if there's an error with the API call, still clear the local state
+      _user = null;
+      _isAuthenticated = false;
+      
+      // Show error snackbar
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'DISMISS',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
     } finally {
       _setLoading(false);
+      notifyListeners();
     }
   }
   
@@ -358,6 +465,11 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  // Get stored credentials for Remember Me
+  Future<Map<String, String>?> getStoredCredentials() async {
+    return await _authService.getStoredCredentials();
   }
 
   // Helper methods

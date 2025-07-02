@@ -49,22 +49,21 @@ class QuickActionSection extends StatelessWidget {
             Expanded(
               child: _buildQuickActionCard(
                 context: context,
-                icon: Icons.spa_outlined,
-                title: 'Manage Services',
-                subtitle: 'Update pricing',
-                color: Colors.purple,
-                route: '/services',
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickActionCard(
-                context: context,
                 icon: Icons.analytics_outlined,
                 title: 'View Reports',
                 subtitle: 'Business insights',
                 color: Colors.blue,
                 route: '/analytics',
+              ),
+            ),
+            Expanded(
+              child: _buildQuickActionCard(
+                context: context,
+                icon: Icons.settings_outlined,
+                title: 'Settings',
+                subtitle: 'Customize app',
+                color: Colors.grey.shade700,
+                route: '/settings',
               ),
             ),
           ],

@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"args": [
+				"run",
+				"--no-sound-null-safety"
+			],
+			"command": "flutter",
+			"group": "flutter",
+			"isBackground": true,
+			"label": "Flutter: Run app",
+			"problemMatcher": [
+				"$flutter-run"
+			],
+			"type": "shell"
+		}
+	]
+}

@@ -161,6 +161,16 @@ class ProfileDrawer extends StatelessWidget {
               Navigator.pushNamed(context, '/debug/image-url');
             },
           ),
+          _buildDrawerItem(
+            icon: Icons.store_mall_directory,
+            title: 'Salon Service Test',
+            subtitle: 'Test salon service functions',
+            iconColor: Colors.purple,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/debug/salon-service-test');
+            },
+          ),
         ],
         
         const SizedBox(height: 24),
@@ -168,7 +178,7 @@ class ProfileDrawer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: ElevatedButton.icon(
             onPressed: () {
-              Navigator.pop(context);
+           
               _showLogoutConfirmation(context);
             },
             icon: const Icon(Icons.logout, size: 18),
@@ -787,21 +797,97 @@ class ProfileDrawer extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
-              // Implement logout functionality
-              authProvider.logout().then((_) {
-                // Navigate to login screen
-                Navigator.of(context).pushReplacementNamed('/login');
-              }).catchError((error) {
-                // Show error
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Logout failed: ${error.toString()}'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              });
+              
+              // Check if Remember Me is active
+              final credentials = await authProvider.getStoredCredentials();
+              final hasRememberMe = credentials != null;
+              
+              if (hasRememberMe) {
+                print('🔍 DEBUG Logout with active Remember Me: ${credentials['email']}');
+                
+                // Show a secondary confirmation for Remember Me
+                if (context.mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                      title: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.info_outline,
+                              color: Colors.blue.shade700,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Text(
+                            'Remember Me',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      content: Text(
+                        'Your "Remember Me" setting is active for ${credentials['email']}. Would you like to keep this device remembered for your next login?',
+                        style: const TextStyle(fontSize: 14, height: 1.4),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            // Log out and DON'T preserve Remember Me
+                            authProvider.logoutAndNavigate(context, preserveRememberMe: false);
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red.shade600,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          ),
+                          child: const Text(
+                            'Forget Me',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            // Log out but preserve Remember Me
+                            authProvider.logoutAndNavigate(context, preserveRememberMe: true);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text(
+                            'Keep Remembered',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              } else {
+                // No Remember Me active, just logout normally
+                authProvider.logoutAndNavigate(context);
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade600,
