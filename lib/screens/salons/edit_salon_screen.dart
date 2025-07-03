@@ -34,9 +34,9 @@ class _EditSalonScreenState extends State<EditSalonScreen> {
   
   // Image picker
   final ImagePicker _picker = ImagePicker();
-  List<File> _newSalonImages = [];
+  final List<File> _newSalonImages = [];
   List<String> _existingImageUrls = [];
-  List<String> _imagesToDelete = [];
+  final List<String> _imagesToDelete = [];
   
   // Profile picture
   File? _newProfilePicture;

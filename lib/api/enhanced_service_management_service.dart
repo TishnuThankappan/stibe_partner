@@ -71,6 +71,7 @@ class ServiceDto {
   
   // Enhanced fields matching API
   final double? offerPrice;
+  final DateTime? offerExpiryDate;
   final String? productsUsed;
   final List<String>? serviceImages;
   
@@ -100,6 +101,7 @@ class ServiceDto {
     required this.bufferTimeBeforeMinutes,
     required this.bufferTimeAfterMinutes,
     this.offerPrice,
+    this.offerExpiryDate,
     this.productsUsed,
     this.serviceImages,
     this.tags = const [],
@@ -130,6 +132,7 @@ class ServiceDto {
       bufferTimeBeforeMinutes: json['bufferTimeBeforeMinutes'] ?? 0,
       bufferTimeAfterMinutes: json['bufferTimeAfterMinutes'] ?? 0,
       offerPrice: json['offerPrice']?.toDouble(),
+      offerExpiryDate: json['offerExpiryDate'] != null ? DateTime.parse(json['offerExpiryDate']) : null,
       productsUsed: json['productsUsed'],
       serviceImages: json['serviceImages'] != null 
           ? List<String>.from(json['serviceImages']).map((url) => ImageUtils.getFullImageUrl(url)).toList()
@@ -163,6 +166,7 @@ class ServiceDto {
       'bufferTimeBeforeMinutes': bufferTimeBeforeMinutes,
       'bufferTimeAfterMinutes': bufferTimeAfterMinutes,
       'offerPrice': offerPrice,
+      'offerExpiryDate': offerExpiryDate?.toIso8601String(),
       'productsUsed': productsUsed,
       'serviceImages': serviceImages,
       'tags': tags,
@@ -193,6 +197,43 @@ class ServiceDto {
       return '\$${discountedPrice.toStringAsFixed(2)}';
     }
     return formattedPrice;
+  }
+
+  // Offer-related helper methods
+  bool get hasActiveOffer {
+    if (offerPrice == null) return false;
+    if (offerExpiryDate == null) return true; // No expiry means permanent offer
+    return DateTime.now().isBefore(offerExpiryDate!);
+  }
+
+  double? get effectivePrice {
+    return hasActiveOffer ? offerPrice : price;
+  }
+
+  double? get savingsAmount {
+    if (!hasActiveOffer || offerPrice == null) return null;
+    return price - offerPrice!;
+  }
+
+  double? get savingsPercentage {
+    if (!hasActiveOffer || offerPrice == null || price == 0) return null;
+    return ((price - offerPrice!) / price) * 100;
+  }
+
+  String? get offerExpiryText {
+    if (offerExpiryDate == null) return null;
+    final now = DateTime.now();
+    final difference = offerExpiryDate!.difference(now);
+    
+    if (difference.isNegative) return 'Expired';
+    
+    if (difference.inDays > 0) {
+      return 'Expires in ${difference.inDays} day${difference.inDays == 1 ? '' : 's'}';
+    } else if (difference.inHours > 0) {
+      return 'Expires in ${difference.inHours} hour${difference.inHours == 1 ? '' : 's'}';
+    } else {
+      return 'Expires in ${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'}';
+    }
   }
 }
 
@@ -344,6 +385,7 @@ class UpdateServiceRequest {
   
   // Enhanced fields
   final double? offerPrice;
+  final DateTime? offerExpiryDate;
   final String? productsUsed;
   final List<String>? serviceImages;
   
@@ -366,6 +408,7 @@ class UpdateServiceRequest {
     this.bufferTimeBeforeMinutes,
     this.bufferTimeAfterMinutes,
     this.offerPrice,
+    this.offerExpiryDate,
     this.productsUsed,
     this.serviceImages,
     this.tags,
@@ -388,6 +431,7 @@ class UpdateServiceRequest {
     if (bufferTimeBeforeMinutes != null) data['bufferTimeBeforeMinutes'] = bufferTimeBeforeMinutes;
     if (bufferTimeAfterMinutes != null) data['bufferTimeAfterMinutes'] = bufferTimeAfterMinutes;
     if (offerPrice != null) data['offerPrice'] = offerPrice;
+    if (offerExpiryDate != null) data['offerExpiryDate'] = offerExpiryDate!.toIso8601String();
     if (productsUsed != null) data['productsUsed'] = productsUsed;
     if (serviceImages != null) data['serviceImages'] = serviceImages;
     if (tags != null) data['tags'] = tags;
@@ -527,10 +571,13 @@ class ServiceManagementService {
     String? searchTerm,
     String? sortBy, // 'name', 'price', 'duration', 'popularity', 'rating'
     bool? ascending,
+    bool includeInactive = true, // Include inactive services by default for management purposes
   }) async {
     print('🔧 Getting services for salon $salonId');
     
     final queryParams = <String, dynamic>{};
+    // For management interface, we want to see all services including inactive ones
+    queryParams['includeInactive'] = includeInactive;
     if (isActive != null) queryParams['isActive'] = isActive;
     if (categoryId != null) queryParams['categoryId'] = categoryId;
     if (searchTerm != null && searchTerm.isNotEmpty) queryParams['search'] = searchTerm;

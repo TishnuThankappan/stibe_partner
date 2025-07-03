@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
+import 'package:stibe_partner/widgets/app_text_field.dart';
 import 'package:stibe_partner/api/enhanced_service_management_service.dart';
+import 'package:stibe_partner/screens/services/manage_categories_screen.dart';
 
 class AddServiceScreen extends StatefulWidget {
   final int salonId;
@@ -42,9 +43,12 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   bool _isActive = true;
   bool _requiresStaffAssignment = false;
   int? _selectedCategoryId;
+  int? _pendingCategoryId; // Store category ID when editing before categories load
   String? _profileImageUrl;
   List<String> _galleryImages = [];
   List<ServiceCategoryDto> _categories = [];
+  String? _errorMessage;
+  bool _isCategoriesLoading = true;
   
   // Image picker
   final ImagePicker _picker = ImagePicker();
@@ -92,19 +96,53 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     
     _isActive = service.isActive;
     _requiresStaffAssignment = service.requiresStaffAssignment;
-    _selectedCategoryId = service.categoryId;
     _profileImageUrl = service.imageUrl;
     _galleryImages = service.serviceImages ?? [];
+    
+    // Store the pending category ID to be validated when categories load
+    _pendingCategoryId = service.categoryId;
   }
 
   Future<void> _loadCategories() async {
+    setState(() {
+      _isCategoriesLoading = true;
+    });
+    
     try {
+      // Get service categories for the salon
       final categories = await _serviceService.getServiceCategories(widget.salonId);
+      
+      // Filter out any potential duplicates and ensure unique IDs
+      final Map<int, ServiceCategoryDto> uniqueCategories = {};
+      for (final category in categories) {
+        uniqueCategories[category.id] = category;
+      }
+      
       setState(() {
-        _categories = categories;
+        _categories = uniqueCategories.values.toList();
+        _isCategoriesLoading = false;
+        
+        // Handle pending category ID from editing mode
+        if (_pendingCategoryId != null) {
+          final categoryExists = _categories.any((cat) => cat.id == _pendingCategoryId);
+          _selectedCategoryId = categoryExists ? _pendingCategoryId : null;
+          _pendingCategoryId = null; // Clear after processing
+        } else if (_selectedCategoryId != null) {
+          // Validate existing selected category ID
+          final categoryExists = _categories.any((cat) => cat.id == _selectedCategoryId);
+          if (!categoryExists) {
+            _selectedCategoryId = null; // Reset if category doesn't exist
+          }
+        }
       });
     } catch (e) {
       print('Error loading categories: $e');
+      setState(() {
+        _categories = [];
+        _selectedCategoryId = null;
+        _pendingCategoryId = null;
+        _isCategoriesLoading = false;
+      });
     }
   }
 
@@ -184,6 +222,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
@@ -372,6 +411,9 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     } catch (e) {
       print('❌ Service save failed: $e');
       if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error saving service: ${e.toString().replaceFirst('Exception: ', '')}'),
@@ -388,15 +430,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     }
   }
 
-  void _suggestCategory() {
-    // TODO: Implement AI category suggestion
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('AI category suggestion coming soon!'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -404,19 +438,10 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       appBar: CustomAppBar(
         title: widget.service == null ? 'Add Service' : 'Edit Service',
         centerTitle: true,
-        actions: [
-          if (!_isLoading)
-            TextButton(
-              onPressed: _saveService,
-              child: Text(
-                widget.service == null ? 'CREATE' : 'UPDATE',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -427,56 +452,95 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Service Image Section
-                    _buildImageSection(),
-                    
-                    const SizedBox(height: 24),
-                    
+                    if (_errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error, color: Colors.red.shade600, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: TextStyle(color: Colors.red.shade600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     // Basic Information
+                    _buildSectionHeader('Basic Information'),
+                    const SizedBox(height: 16),
                     _buildBasicInfoSection(),
-                    
                     const SizedBox(height: 24),
-                    
-                    // Pricing Section
+
+                    // Service Image
+                    _buildSectionHeader('Service Image'),
+                    const SizedBox(height: 16),
+                    _buildImageSection(),
+                    const SizedBox(height: 24),
+
+                    // Pricing
+                    _buildSectionHeader('Pricing'),
+                    const SizedBox(height: 16),
                     _buildPricingSection(),
-                    
                     const SizedBox(height: 24),
-                    
-                    // Category Section
+
+                    // Category
+                    _buildSectionHeader('Category'),
+                    const SizedBox(height: 16),
                     _buildCategorySection(),
-                    
                     const SizedBox(height: 24),
-                    
-                    // Advanced Settings
-                    _buildAdvancedSection(),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Gallery Section
+
+                    // Service Gallery
+                    _buildSectionHeader('Service Gallery'),
+                    const SizedBox(height: 16),
                     _buildGallerySection(),
-                    
+                    const SizedBox(height: 24),
+
+                    // Advanced Settings
+                    _buildSectionHeader('Advanced Settings'),
+                    const SizedBox(height: 16),
+                    _buildAdvancedSection(),
                     const SizedBox(height: 32),
-                    
+
                     // Save Button
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _saveService,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: Text(
-                          widget.service == null ? 'Create Service' : 'Update Service',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text(
+                                widget.service == null ? 'Create Service' : 'Update Service',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
                     
@@ -488,76 +552,114 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  Widget _buildImageSection() {
-    return _buildSection(
-      title: 'Service Image',
-      icon: Icons.image_outlined,
-      child: Column(
-        children: [
-          // Profile Image
-          GestureDetector(
-            onTap: _pickProfileImage,
-            child: Container(
-              width: double.infinity,
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: _profileImageUrl!.startsWith('http')
-                          ? Image.network(
-                              _profileImageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return _buildImagePlaceholder();
-                              },
-                            )
-                          : Image.file(
-                              File(_profileImageUrl!),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return _buildImagePlaceholder();
-                              },
-                            ),
-                    )
-                  : _buildImagePlaceholder(),
-            ),
+  Widget _buildSectionHeader(String title) {
+    return Row(
+      children: [
+        Container(
+          height: 20,
+          width: 4,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(2),
           ),
-          
-          const SizedBox(height: 12),
-          
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickProfileImage,
-                  icon: const Icon(Icons.photo_camera),
-                  label: Text(_profileImageUrl != null ? 'Change Image' : 'Add Image'),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageSection() {
+    return Column(
+      children: [
+        // Profile Image
+        GestureDetector(
+          onTap: _pickProfileImage,
+          child: Container(
+            width: double.infinity,
+            height: 200,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _profileImageUrl!.startsWith('http')
+                        ? Image.network(
+                            _profileImageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return _buildImagePlaceholder();
+                            },
+                          )
+                        : Image.file(
+                            File(_profileImageUrl!),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return _buildImagePlaceholder();
+                            },
+                          ),
+                  )
+                : _buildImagePlaceholder(),
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        Text(
+          'This will be displayed as your service\'s main image',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickProfileImage,
+                icon: const Icon(Icons.photo_camera, size: 18),
+                label: Text(
+                  _profileImageUrl != null ? 'Change' : 'Upload',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 ),
               ),
-              if (_profileImageUrl != null) ...[
-                const SizedBox(width: 12),
-                OutlinedButton(
+            ),
+            if (_profileImageUrl != null) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
                   onPressed: () {
                     setState(() {
                       _profileImageUrl = null;
                     });
                   },
+                  icon: const Icon(Icons.delete, size: 18),
+                  label: const Text('Remove', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
                     side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   ),
-                  child: const Icon(Icons.delete),
                 ),
-              ],
+              ),
             ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -592,553 +694,593 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   }
 
   Widget _buildBasicInfoSection() {
-    return _buildSection(
-      title: 'Basic Information',
-      icon: Icons.info_outline,
-      child: Column(
-        children: [
-          // Service Name
-          TextFormField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Service Name *',
-              hintText: 'e.g., Hair Cut & Style',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Service name is required';
-              }
-              return null;
-            },
-            textCapitalization: TextCapitalization.words,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Description
-          TextFormField(
-            controller: _descriptionController,
-            decoration: InputDecoration(
-              labelText: 'Description',
-              hintText: 'Describe your service...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            maxLines: 3,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Duration
-          TextFormField(
-            controller: _durationController,
-            decoration: InputDecoration(
-              labelText: 'Duration (minutes) *',
-              hintText: 'e.g., 30',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              suffixText: 'min',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Duration is required';
-              }
-              final duration = int.tryParse(value);
-              if (duration == null || duration <= 0) {
-                return 'Please enter a valid duration';
-              }
-              return null;
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Products Used
-          TextFormField(
-            controller: _productsUsedController,
-            decoration: InputDecoration(
-              labelText: 'Products Used (Optional)',
-              hintText: 'e.g., Premium hair care products, organic oils',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            maxLines: 2,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        // Service Name
+        AppTextField(
+          controller: _nameController,
+          label: 'Service Name',
+          hintText: 'e.g., Hair Cut & Style',
+          prefixIcon: const Icon(Icons.spa),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Service name is required';
+            }
+            return null;
+          },
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Description
+        AppTextField(
+          controller: _descriptionController,
+          label: 'Description',
+          hintText: 'Describe your service...',
+          prefixIcon: const Icon(Icons.description),
+          maxLines: 3,
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Duration
+        AppTextField(
+          controller: _durationController,
+          label: 'Duration (minutes)',
+          hintText: 'e.g., 30',
+          prefixIcon: const Icon(Icons.timer),
+          keyboardType: TextInputType.number,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Duration is required';
+            }
+            final duration = int.tryParse(value);
+            if (duration == null || duration <= 0) {
+              return 'Please enter a valid duration';
+            }
+            return null;
+          },
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Products Used
+        AppTextField(
+          controller: _productsUsedController,
+          label: 'Products Used (Optional)',
+          hintText: 'e.g., Premium hair care products, organic oils',
+          prefixIcon: const Icon(Icons.inventory),
+          maxLines: 2,
+        ),
+      ],
     );
   }
 
   Widget _buildPricingSection() {
-    return _buildSection(
-      title: 'Pricing',
-      icon: Icons.currency_rupee,
-      child: Column(
-        children: [
-          // Regular Price
-          TextFormField(
-            controller: _priceController,
-            decoration: InputDecoration(
-              labelText: 'Regular Price (₹) *',
-              hintText: 'e.g., 500',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              prefixText: '₹ ',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Price is required';
+    return Column(
+      children: [
+        // Regular Price
+        AppTextField(
+          controller: _priceController,
+          label: 'Regular Price (₹)',
+          hintText: 'e.g., 500',
+          prefixIcon: const Icon(Icons.currency_rupee),
+          keyboardType: TextInputType.number,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Price is required';
+            }
+            final price = double.tryParse(value);
+            if (price == null || price <= 0) {
+              return 'Please enter a valid price';
+            }
+            return null;
+          },
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Offer Price
+        AppTextField(
+          controller: _offerPriceController,
+          label: 'Offer Price (₹) - Optional',
+          hintText: 'e.g., 400',
+          prefixIcon: const Icon(Icons.local_offer),
+          keyboardType: TextInputType.number,
+          validator: (value) {
+            if (value != null && value.trim().isNotEmpty) {
+              final offerPrice = double.tryParse(value);
+              if (offerPrice == null || offerPrice <= 0) {
+                return 'Please enter a valid offer price';
               }
-              final price = double.tryParse(value);
-              if (price == null || price <= 0) {
-                return 'Please enter a valid price';
+              final regularPrice = double.tryParse(_priceController.text);
+              if (regularPrice != null && offerPrice >= regularPrice) {
+                return 'Offer price must be less than regular price';
               }
-              return null;
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Offer Price
-          TextFormField(
-            controller: _offerPriceController,
-            decoration: InputDecoration(
-              labelText: 'Offer Price (₹) - Optional',
-              hintText: 'e.g., 400',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              prefixText: '₹ ',
-              helperText: 'Leave empty if no offer',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            validator: (value) {
-              if (value != null && value.trim().isNotEmpty) {
-                final offerPrice = double.tryParse(value);
-                if (offerPrice == null || offerPrice <= 0) {
-                  return 'Please enter a valid offer price';
-                }
-                final regularPrice = double.tryParse(_priceController.text);
-                if (regularPrice != null && offerPrice >= regularPrice) {
-                  return 'Offer price must be less than regular price';
-                }
-              }
-              return null;
-            },
-          ),
-        ],
-      ),
+            }
+            return null;
+          },
+        ),
+      ],
     );
   }
 
   Widget _buildCategorySection() {
-    return _buildSection(
-      title: 'Category',
-      icon: Icons.category_outlined,
-      child: Column(
-        children: [
-          // Category Dropdown
-          DropdownButtonFormField<int>(
-            value: _selectedCategoryId,
+    return Column(
+      children: [
+        // Category Dropdown
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.shade100,
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: DropdownButtonFormField<int?>(
+            value: !_isCategoriesLoading && _categories.isNotEmpty && _selectedCategoryId != null && 
+                   _categories.any((cat) => cat.id == _selectedCategoryId) 
+                   ? _selectedCategoryId 
+                   : null,
             decoration: InputDecoration(
               labelText: 'Service Category',
+              prefixIcon: _isCategoriesLoading 
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2)
+                    )
+                  : const Icon(Icons.category),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
+              filled: true,
+              fillColor: Colors.white,
+              hintText: _isCategoriesLoading 
+                  ? 'Loading categories...' 
+                  : _categories.isEmpty
+                    ? 'No categories available'
+                    : 'Select a category for this service',
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
-            items: [
-              const DropdownMenuItem(
-                value: null,
-                child: Text('No Category'),
-              ),
+            items: _isCategoriesLoading || _categories.isEmpty ? [] : [
               ..._categories.map((category) {
+                IconData iconData;
+                Color iconColor;
+                
+                // Assign icons based on category names
+                switch(category.name.toLowerCase()) {
+                  case 'hair care':
+                    iconData = Icons.content_cut;
+                    iconColor = Colors.brown;
+                    break;
+                  case 'facial':
+                    iconData = Icons.face;
+                    iconColor = Colors.orange;
+                    break;
+                  case 'nail care':
+                    iconData = Icons.back_hand;
+                    iconColor = Colors.pink;
+                    break;
+                  case 'massage':
+                    iconData = Icons.spa;
+                    iconColor = Colors.green;
+                    break;
+                  case 'body treatments':
+                    iconData = Icons.accessibility_new;
+                    iconColor = Colors.teal;
+                    break;
+                  case 'makeup':
+                    iconData = Icons.brush;
+                    iconColor = Colors.purple;
+                    break;
+                  case 'waxing':
+                    iconData = Icons.waves;
+                    iconColor = Colors.amber;
+                    break;
+                  default:
+                    iconData = Icons.spa;
+                    iconColor = Colors.blue;
+                }
+                
                 return DropdownMenuItem(
                   value: category.id,
-                  child: Text(category.name),
+                  child: Row(
+                    children: [
+                      Icon(iconData, size: 18, color: iconColor),
+                      const SizedBox(width: 12),
+                      Text(category.name),
+                    ],
+                  ),
                 );
               }),
             ],
-            onChanged: (value) {
+            onChanged: _isCategoriesLoading || _categories.isEmpty ? null : (int? value) {
               setState(() {
                 _selectedCategoryId = value;
               });
             },
+            icon: const Icon(Icons.arrow_drop_down_circle, color: AppColors.primary),
+            isExpanded: true,
+            dropdownColor: Colors.white,
+            borderRadius: BorderRadius.circular(12),
           ),
-          
-          const SizedBox(height: 12),
-          
-          // AI Suggestion Button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _suggestCategory,
-              icon: const Icon(Icons.psychology),
-              label: const Text('AI Suggest Category'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.purple,
-                side: const BorderSide(color: Colors.purple),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Button to manage categories
+        Row(
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.add_circle_outline, size: 16),
+              label: const Text("Can't find the category you need?"),
+              onPressed: () => _navigateToManageCategories(),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                textStyle: const TextStyle(fontSize: 14),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ],
+    );
+  }
+  
+  void _navigateToManageCategories() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ManageCategoriesScreen(
+          salonId: widget.salonId,
+          salonName: widget.salonName,
+        ),
       ),
     );
+    
+    // Refresh categories when returning from the manage categories screen
+    if (result == true || result == null) {
+      _loadCategories();
+    }
   }
 
   Widget _buildAdvancedSection() {
-    return _buildSection(
-      title: 'Advanced Settings',
-      icon: Icons.settings_outlined,
-      child: Column(
-        children: [
-          // Active Status
-          SwitchListTile(
-            title: const Text('Service Active'),
-            subtitle: const Text('Make this service available for booking'),
-            value: _isActive,
-            onChanged: (value) {
-              setState(() {
-                _isActive = value;
-              });
-            },
-            contentPadding: EdgeInsets.zero,
+    return Column(
+      children: [
+        // Active Status
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
           ),
-          
-          const Divider(),
-          
-          // Staff Assignment Required
-          SwitchListTile(
-            title: const Text('Requires Staff Assignment'),
-            subtitle: const Text('Customer must select a staff member'),
-            value: _requiresStaffAssignment,
-            onChanged: (value) {
-              setState(() {
-                _requiresStaffAssignment = value;
-              });
-            },
-            contentPadding: EdgeInsets.zero,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Max Concurrent Bookings
-          TextFormField(
-            controller: _maxConcurrentBookingsController,
-            decoration: InputDecoration(
-              labelText: 'Max Concurrent Bookings',
-              hintText: '1',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.visibility,
+                color: Colors.grey.shade600,
+                size: 24,
               ),
-              helperText: 'How many customers can book this service at the same time',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'This field is required';
-              }
-              final count = int.tryParse(value);
-              if (count == null || count <= 0) {
-                return 'Please enter a valid number';
-              }
-              return null;
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Buffer Time Before
-          TextFormField(
-            controller: _bufferTimeBeforeController,
-            decoration: InputDecoration(
-              labelText: 'Buffer Time Before (minutes)',
-              hintText: '0',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Service Active',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Make this service available for booking',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              suffixText: 'min',
-              helperText: 'Preparation time before the service',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'This field is required';
-              }
-              final time = int.tryParse(value);
-              if (time == null || time < 0) {
-                return 'Please enter a valid time';
-              }
-              return null;
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Buffer Time After
-          TextFormField(
-            controller: _bufferTimeAfterController,
-            decoration: InputDecoration(
-              labelText: 'Buffer Time After (minutes)',
-              hintText: '0',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+              Switch(
+                value: _isActive,
+                onChanged: (value) {
+                  setState(() {
+                    _isActive = value;
+                  });
+                },
+                activeColor: AppColors.primary,
               ),
-              suffixText: 'min',
-              helperText: 'Cleanup time after the service',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'This field is required';
-              }
-              final time = int.tryParse(value);
-              if (time == null || time < 0) {
-                return 'Please enter a valid time';
-              }
-              return null;
-            },
+            ],
           ),
-        ],
-      ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Staff Assignment Required
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.people,
+                color: Colors.grey.shade600,
+                size: 24,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Requires Staff Assignment',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Customer must select a staff member',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _requiresStaffAssignment,
+                onChanged: (value) {
+                  setState(() {
+                    _requiresStaffAssignment = value;
+                  });
+                },
+                activeColor: AppColors.primary,
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Max Concurrent Bookings
+        AppTextField(
+          controller: _maxConcurrentBookingsController,
+          label: 'Max Concurrent Bookings',
+          hintText: '1',
+          prefixIcon: const Icon(Icons.groups),
+          keyboardType: TextInputType.number,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'This field is required';
+            }
+            final count = int.tryParse(value);
+            if (count == null || count <= 0) {
+              return 'Please enter a valid number';
+            }
+            return null;
+          },
+        ),
+        
+        const SizedBox(height: 16),
+        
+        Row(
+          children: [
+            Expanded(
+              child: AppTextField(
+                controller: _bufferTimeBeforeController,
+                label: 'Buffer Before (min)',
+                hintText: '0',
+                prefixIcon: const Icon(Icons.schedule),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Required';
+                  }
+                  final time = int.tryParse(value);
+                  if (time == null || time < 0) {
+                    return 'Invalid time';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: AppTextField(
+                controller: _bufferTimeAfterController,
+                label: 'Buffer After (min)',
+                hintText: '0',
+                prefixIcon: const Icon(Icons.schedule),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Required';
+                  }
+                  final time = int.tryParse(value);
+                  if (time == null || time < 0) {
+                    return 'Invalid time';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildGallerySection() {
-    return _buildSection(
-      title: 'Service Gallery',
-      icon: Icons.photo_library_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Add images to showcase your service (Optional)',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Display selected images
+        if (_galleryImages.isNotEmpty) ...[
           Text(
-            'Add images to showcase your service (Optional)',
+            'Current Images',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
             ),
           ),
-          
           const SizedBox(height: 12),
-          
-          // Add Gallery Images Button
           SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _pickGalleryImages,
-              icon: const Icon(Icons.add_photo_alternate),
-              label: const Text('Add Gallery Images'),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Gallery Images Grid
-          if (_galleryImages.isNotEmpty) ...[
-            Row(
-              children: [
-                Text(
-                  '${_galleryImages.length} image(s) selected',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.circle, color: Colors.orange, size: 8),
-                const SizedBox(width: 4),
-                Text('Local', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                const SizedBox(width: 8),
-                Icon(Icons.circle, color: Colors.green, size: 8),
-                const SizedBox(width: 4),
-                Text('Uploaded', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-              ],
-            ),
-            
-            const SizedBox(height: 8),
-            
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 1.0,
-              ),
+            height: 100,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
               itemCount: _galleryImages.length,
               itemBuilder: (context, index) {
-                return _buildGalleryImageCard(_galleryImages[index], index);
+                return Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: _galleryImages[index].startsWith('http')
+                            ? Image.network(
+                                _galleryImages[index],
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(
+                                File(_galleryImages[index]),
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _galleryImages.removeAt(index);
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Status indicator
+                      Positioned(
+                        bottom: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _galleryImages[index].startsWith('http') ? Colors.green : Colors.orange,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _galleryImages[index].startsWith('http') ? 'SAVED' : 'NEW',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
               },
             ),
-          ],
+          ),
+          const SizedBox(height: 16),
         ],
-      ),
-    );
-  }
-
-  Widget _buildGalleryImageCard(String imagePath, int index) {
-    final isLocalFile = !imagePath.startsWith('http');
-    
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isLocalFile ? Colors.orange.shade300 : Colors.green.shade300,
-          width: 2,
+        
+        // Add New Images Button
+        Container(
+          width: double.infinity,
+          height: 120,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.grey.shade300,
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _pickGalleryImages,
+              borderRadius: BorderRadius.circular(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 40,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add Gallery Photos',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to select multiple images',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: imagePath.startsWith('http')
-                ? Image.network(
-                    imagePath,
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.broken_image,
-                          color: Colors.grey,
-                        ),
-                      );
-                    },
-                  )
-                : Image.file(
-                    File(imagePath),
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.broken_image,
-                          color: Colors.grey,
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          
-          // Status indicator
-          Positioned(
-            top: 4,
-            left: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: isLocalFile ? Colors.orange : Colors.green,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.all(3),
-              child: Icon(
-                isLocalFile ? Icons.upload_outlined : Icons.cloud_done,
-                color: Colors.white,
-                size: 12,
-              ),
-            ),
-          ),
-          
-          // Remove button
-          Positioned(
-            top: 4,
-            right: 4,
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _galleryImages.removeAt(index);
-                });
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: const Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSection({
-    required String title,
-    required IconData icon,
-    required Widget child,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.05),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: AppColors.primary, size: 20),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: child,
-          ),
-        ],
-      ),
+      ],
     );
   }
 }

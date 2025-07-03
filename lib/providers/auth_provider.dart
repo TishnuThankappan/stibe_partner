@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:stibe_partner/api/auth_service.dart';
 import 'package:stibe_partner/api/salon_service.dart';

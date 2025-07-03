@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/api/enhanced_service_management_service.dart';
+import 'package:stibe_partner/utils/image_utils.dart';
 
 class ServiceDetailScreen extends StatefulWidget {
   final ServiceDto service;
@@ -22,6 +26,7 @@ class ServiceDetailScreen extends StatefulWidget {
 class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ServiceManagementService _serviceService = ServiceManagementService();
+  final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
   late ServiceDto _currentService;
 
@@ -197,6 +202,215 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error deleting service: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _editServicePrice() async {
+    final TextEditingController controller = TextEditingController(
+      text: _currentService.price.toStringAsFixed(0),
+    );
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Service Price'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set the regular price for this service:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Price (₹)',
+                border: OutlineInputBorder(),
+                hintText: 'Enter price in rupees',
+                prefixText: '₹ ',
+              ),
+              onChanged: (value) {
+                // Validate input as user types
+                final price = double.tryParse(value);
+                if (price != null && price <= 0) {
+                  // Show validation hint
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = double.tryParse(controller.text);
+              if (value != null && value > 0) {
+                Navigator.of(context).pop(value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid price greater than 0'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Update Price'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != _currentService.price) {
+      await _updateServicePricing(price: result);
+    }
+  }
+
+  Future<void> _editOfferPrice() async {
+    final TextEditingController controller = TextEditingController(
+      text: _currentService.offerPrice?.toStringAsFixed(0) ?? '',
+    );
+
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set Offer Price'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Set an offer price for this service (optional):',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Regular price: ₹${_currentService.price.toStringAsFixed(0)}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Offer Price (₹)',
+                border: OutlineInputBorder(),
+                hintText: 'Enter offer price or leave empty to remove',
+                prefixText: '₹ ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          if (_currentService.offerPrice != null)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null), // Remove offer price
+              child: const Text('Remove Offer', style: TextStyle(color: Colors.red)),
+            ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isEmpty) {
+                // Remove offer price
+                Navigator.of(context).pop(null);
+                return;
+              }
+              
+              final value = double.tryParse(controller.text);
+              if (value != null && value > 0) {
+                if (value >= _currentService.price) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Offer price must be less than regular price'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid offer price'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Set Offer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != _currentService.offerPrice) {
+      await _updateServicePricing(offerPrice: result);
+    }
+  }
+
+  Future<void> _updateServicePricing({
+    double? price,
+    double? offerPrice,
+  }) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final updateRequest = UpdateServiceRequest(
+        id: _currentService.id,
+        price: price,
+        offerPrice: offerPrice,
+      );
+
+      final updatedService = await _serviceService.updateService(
+        widget.salonId,
+        updateRequest,
+      );
+
+      setState(() {
+        _currentService = updatedService;
+        _isLoading = false;
+      });
+
+      // Show success message
+      String message = '';
+      if (price != null) {
+        message = 'Service price updated to ₹${price.toStringAsFixed(0)}';
+      } else if (offerPrice != null) {
+        message = 'Offer price set to ₹${offerPrice.toStringAsFixed(0)}';
+      } else if (offerPrice == null && _currentService.offerPrice == null) {
+        message = 'Offer price removed successfully';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update pricing: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -691,6 +905,26 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
                 ),
                 const Divider(),
                 ListTile(
+                  leading: const Icon(Icons.currency_rupee, color: Colors.green),
+                  title: const Text('Change Price'),
+                  subtitle: Text('Current: ₹${_currentService.price.toStringAsFixed(0)}'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: _editServicePrice,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.local_offer, color: Colors.orange),
+                  title: const Text('Set Offer Price'),
+                  subtitle: Text(_currentService.offerPrice != null 
+                      ? 'Current: ₹${_currentService.offerPrice!.toStringAsFixed(0)}'
+                      : 'No offer price set'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: _editOfferPrice,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                ListTile(
                   leading: const Icon(Icons.delete, color: Colors.red),
                   title: const Text('Delete Service', style: TextStyle(color: Colors.red)),
                   subtitle: const Text('Permanently remove this service'),
@@ -723,32 +957,24 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
                 _buildSettingRow(
                   'Max Concurrent Bookings',
                   '${_currentService.maxConcurrentBookings}',
-                  () {
-                    // TODO: Implement edit functionality
-                  },
+                  () => _editMaxConcurrentBookings(),
                 ),
                 _buildSettingRow(
                   'Staff Assignment Required',
                   _currentService.requiresStaffAssignment ? 'Yes' : 'No',
-                  () {
-                    // TODO: Implement edit functionality
-                  },
+                  () => _toggleStaffAssignmentRequired(),
                 ),
                 if (_currentService.bufferTimeBeforeMinutes > 0)
                   _buildSettingRow(
                     'Buffer Time Before',
                     '${_currentService.bufferTimeBeforeMinutes} minutes',
-                    () {
-                      // TODO: Implement edit functionality
-                    },
+                    () => _editBufferTimeBefore(),
                   ),
                 if (_currentService.bufferTimeAfterMinutes > 0)
                   _buildSettingRow(
                     'Buffer Time After',
                     '${_currentService.bufferTimeAfterMinutes} minutes',
-                    () {
-                      // TODO: Implement edit functionality
-                    },
+                    () => _editBufferTimeAfter(),
                   ),
               ],
             ),
@@ -853,6 +1079,9 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
   }
 
   Widget _buildGalleryImageCard(String imageUrl, int index) {
+    // Ensure the image URL is absolute
+    final fullImageUrl = ImageUtils.getFullImageUrl(imageUrl);
+    
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -869,10 +1098,24 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
         child: Stack(
           children: [
             Image.network(
-              imageUrl,
+              fullImageUrl,
               width: double.infinity,
               height: double.infinity,
               fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.grey.shade200,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  ),
+                );
+              },
               errorBuilder: (context, error, stackTrace) {
                 return Container(
                   color: Colors.grey.shade200,
@@ -897,21 +1140,43 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
                 );
               },
             ),
+            // Add tap to view full screen (positioned before delete button)
+            Positioned.fill(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _viewImageFullScreen(fullImageUrl),
+                ),
+              ),
+            ),
+            // Delete button (positioned after fullscreen to be on top)
             Positioned(
               top: 8,
               right: 8,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.white, size: 16),
-                  onPressed: () => _removeGalleryImage(index),
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                  onTap: () => _removeGalleryImage(index),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: const Icon(
+                      Icons.delete,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
@@ -923,21 +1188,516 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
   }
 
   Future<void> _addGalleryImage() async {
-    // TODO: Implement image picker and upload
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Gallery image upload feature coming soon'),
-        backgroundColor: Colors.blue,
+    try {
+      final List<XFile> images = await _picker.pickMultiImage();
+      
+      if (images.isNotEmpty && mounted) {
+        setState(() {
+          _isLoading = true;
+        });
+
+        try {
+          // Upload images to server
+          final uploadedUrls = await _serviceService.uploadServiceGalleryImages(
+            widget.salonId,
+            images.map((img) => File(img.path)).toList(),
+          );
+
+          // Update the service with new gallery images
+          final currentImages = _currentService.serviceImages ?? [];
+          final updatedImages = [...currentImages, ...uploadedUrls];
+
+          final updatedService = await _serviceService.updateService(
+            widget.salonId,
+            UpdateServiceRequest(
+              id: _currentService.id,
+              serviceImages: updatedImages,
+            ),
+          );
+
+          setState(() {
+            _currentService = updatedService;
+            _isLoading = false;
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${images.length} images added to gallery'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          setState(() {
+            _isLoading = false;
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error uploading images: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking images: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeGalleryImage(int index) async {
+    // Add haptic feedback
+    HapticFeedback.mediumImpact();
+    
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Remove Image'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to remove this image from the gallery? This action cannot be undone.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final currentImages = _currentService.serviceImages ?? [];
+      if (index < currentImages.length) {
+        final updatedImages = List<String>.from(currentImages);
+        updatedImages.removeAt(index);
+
+        final updatedService = await _serviceService.updateService(
+          widget.salonId,
+          UpdateServiceRequest(
+            id: _currentService.id,
+            serviceImages: updatedImages,
+          ),
+        );
+
+        setState(() {
+          _currentService = updatedService;
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image removed from gallery'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error removing image: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _viewImageFullScreen(String imageUrl) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return _FullScreenImageView(imageUrl: imageUrl);
+        },
       ),
     );
   }
 
-  Future<void> _removeGalleryImage(int index) async {
-    // TODO: Implement image removal
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Gallery image removal feature coming soon'),
-        backgroundColor: Colors.blue,
+  // Advanced Settings Edit Methods
+  Future<void> _editMaxConcurrentBookings() async {
+    final TextEditingController controller = TextEditingController(
+      text: _currentService.maxConcurrentBookings.toString(),
+    );
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Max Concurrent Bookings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set the maximum number of concurrent bookings for this service:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Max Concurrent Bookings',
+                border: OutlineInputBorder(),
+                hintText: 'Enter a number (1-10)',
+              ),
+              onChanged: (value) {
+                // Validate input
+                final num = int.tryParse(value);
+                if (num != null && (num < 1 || num > 10)) {
+                  // Show validation error
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value >= 1 && value <= 10) {
+                Navigator.of(context).pop(value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid number between 1 and 10'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != _currentService.maxConcurrentBookings) {
+      await _updateServiceSetting(maxConcurrentBookings: result);
+    }
+  }
+
+  Future<void> _toggleStaffAssignmentRequired() async {
+    final newValue = !_currentService.requiresStaffAssignment;
+    
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Staff Assignment'),
+        content: Text(
+          newValue 
+            ? 'Require staff assignment for this service?\n\nThis means a specific staff member must be assigned when booking this service.'
+            : 'Make staff assignment optional for this service?\n\nThis allows customers to book without selecting a specific staff member.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(newValue ? 'Require Assignment' : 'Make Optional'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _updateServiceSetting(requiresStaffAssignment: newValue);
+    }
+  }
+
+  Future<void> _editBufferTimeBefore() async {
+    final TextEditingController controller = TextEditingController(
+      text: _currentService.bufferTimeBeforeMinutes.toString(),
+    );
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Buffer Time Before'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set buffer time before the service starts (in minutes):',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This creates a gap before the service to allow for preparation.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Buffer Time (minutes)',
+                border: OutlineInputBorder(),
+                hintText: 'Enter minutes (0-60)',
+                suffixText: 'min',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value >= 0 && value <= 60) {
+                Navigator.of(context).pop(value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid number between 0 and 60'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != _currentService.bufferTimeBeforeMinutes) {
+      await _updateServiceSetting(bufferTimeBeforeMinutes: result);
+    }
+  }
+
+  Future<void> _editBufferTimeAfter() async {
+    final TextEditingController controller = TextEditingController(
+      text: _currentService.bufferTimeAfterMinutes.toString(),
+    );
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Buffer Time After'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set buffer time after the service ends (in minutes):',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This creates a gap after the service for cleanup and setup.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Buffer Time (minutes)',
+                border: OutlineInputBorder(),
+                hintText: 'Enter minutes (0-60)',
+                suffixText: 'min',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value >= 0 && value <= 60) {
+                Navigator.of(context).pop(value);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid number between 0 and 60'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != _currentService.bufferTimeAfterMinutes) {
+      await _updateServiceSetting(bufferTimeAfterMinutes: result);
+    }
+  }
+
+  Future<void> _updateServiceSetting({
+    int? maxConcurrentBookings,
+    bool? requiresStaffAssignment,
+    int? bufferTimeBeforeMinutes,
+    int? bufferTimeAfterMinutes,
+  }) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final updateRequest = UpdateServiceRequest(
+        id: _currentService.id,
+        maxConcurrentBookings: maxConcurrentBookings,
+        requiresStaffAssignment: requiresStaffAssignment,
+        bufferTimeBeforeMinutes: bufferTimeBeforeMinutes,
+        bufferTimeAfterMinutes: bufferTimeAfterMinutes,
+      );
+
+      final updatedService = await _serviceService.updateService(
+        widget.salonId,
+        updateRequest,
+      );
+
+      setState(() {
+        _currentService = updatedService;
+        _isLoading = false;
+      });
+
+      // Show success message
+      String settingName = '';
+      if (maxConcurrentBookings != null) settingName = 'Max Concurrent Bookings';
+      if (requiresStaffAssignment != null) settingName = 'Staff Assignment Requirement';
+      if (bufferTimeBeforeMinutes != null) settingName = 'Buffer Time Before';
+      if (bufferTimeAfterMinutes != null) settingName = 'Buffer Time After';
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$settingName updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update setting: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _FullScreenImageView extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImageView({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          panEnabled: true,
+          boundaryMargin: const EdgeInsets.all(20),
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      color: Colors.white,
+                      size: 60,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Failed to load image',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

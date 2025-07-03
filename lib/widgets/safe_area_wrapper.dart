@@ -7,10 +7,10 @@ class SafeAreaWrapper extends StatefulWidget {
   final String title;
 
   const SafeAreaWrapper({
-    Key? key,
+    super.key,
     required this.child,
     this.title = 'Error',
-  }) : super(key: key);
+  });
 
   @override
   State<SafeAreaWrapper> createState() => _SafeAreaWrapperState();

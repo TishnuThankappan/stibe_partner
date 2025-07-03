@@ -34,7 +34,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
   
   // Image picker
   final ImagePicker _picker = ImagePicker();
-  List<File> _salonImages = [];
+  final List<File> _salonImages = [];
   File? _profilePicture;
   
   // Location
@@ -288,7 +288,7 @@ class _AddSalonScreenState extends State<AddSalonScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating salon: ${_errorMessage}'),
+            content: Text('Error creating salon: $_errorMessage'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),

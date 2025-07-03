@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
-import 'package:stibe_partner/screens/salons/salon_detail_screen.dart';
+
 import 'package:stibe_partner/screens/salons/add_salon_screen.dart';
+import 'package:stibe_partner/screens/salons/salon_detail_screen_new.dart';
 import 'package:stibe_partner/screens/salons/salon_image_preview_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/api/salon_service.dart';

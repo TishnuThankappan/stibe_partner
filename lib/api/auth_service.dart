@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:stibe_partner/api/api_service.dart';
 import 'package:stibe_partner/models/user_model.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
-import 'package:stibe_partner/utils/image_utils.dart';
 
 class AuthService {
   final ApiService _apiService = ApiService();

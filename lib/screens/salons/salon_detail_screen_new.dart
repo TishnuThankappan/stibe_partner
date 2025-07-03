@@ -7,6 +7,7 @@ import 'package:stibe_partner/screens/salons/edit_salon_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/api/salon_service.dart';
 import 'package:stibe_partner/api/enhanced_service_management_service.dart';
+import 'package:stibe_partner/screens/services/services_categories_tab.dart';
 
 class SalonDetailScreen extends StatefulWidget {
   final Map<String, dynamic> salon;
@@ -26,7 +27,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
   late TabController _tabController;
   final SalonService _salonService = SalonService();
   final ServiceManagementService _enhancedServiceService = ServiceManagementService();
-  bool _isLoading = false;
+  final bool _isLoading = false;
   Map<String, dynamic> _currentSalon = {};
 
   @override
@@ -78,9 +79,9 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
               indicatorColor: AppColors.primary,
               tabs: const [
                 Tab(text: 'Overview'),
+                Tab(text: 'Services'),
                 Tab(text: 'Staff'),
                 Tab(text: 'Settings'),
-                Tab(text: 'Salon Works'),
               ],
             ),
           ),
@@ -91,9 +92,9 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
               controller: _tabController,
               children: [
                 _buildOverviewTab(),
+                _buildServicesTab(),
                 _buildStaffTab(),
                 _buildSettingsTab(),
-                _buildSalonWorksTab(),
               ],
             ),
           ),
@@ -259,6 +260,14 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
         content: Text('Package creation feature coming soon!'),
         backgroundColor: Colors.blue,
       ),
+    );
+  }
+
+  Widget _buildServicesTab() {
+    // Use the new ServicesCategoriesTab component
+    return ServicesCategoriesTab(
+      salonId: _currentSalon['id'],
+      salonName: _currentSalon['name'],
     );
   }
 }

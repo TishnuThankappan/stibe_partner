@@ -95,7 +95,7 @@ class _SalonImagePreviewScreenState extends State<SalonImagePreviewScreen> {
               },
               itemCount: widget.imageUrls.length,
               itemBuilder: (context, index) {
-                return Container(
+                return SizedBox(
                   width: double.infinity,
                   height: double.infinity,                      child: Hero(
                         tag: 'salon_image_${widget.salonName}_$index',
