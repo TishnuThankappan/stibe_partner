@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
+import 'package:stibe_partner/widgets/loading_indicator.dart';
 
 class CustomButton extends StatelessWidget {
   final String text;
@@ -14,6 +15,7 @@ class CustomButton extends StatelessWidget {
   final IconData? icon;
   final bool isOutlined;
   final EdgeInsetsGeometry? padding;
+  final double? loadingSize;
   
   const CustomButton({
     super.key,
@@ -29,6 +31,7 @@ class CustomButton extends StatelessWidget {
     this.icon,
     this.isOutlined = false,
     this.padding,
+    this.loadingSize,
   });
 
   @override
@@ -58,13 +61,11 @@ class CustomButton extends StatelessWidget {
             child: Center(
               child: isLoading
                   ? SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          textColor ?? defaultTextColor,
-                        ),
+                      width: loadingSize ?? 24,
+                      height: loadingSize ?? 24,
+                      child: LoadingIndicator.button(
+                        color: textColor ?? defaultTextColor,
+                        size: loadingSize ?? 20.0,
                       ),
                     )
                   : Row(
@@ -105,6 +106,7 @@ class PrimaryButton extends StatelessWidget {
   final double? height;
   final IconData? icon;
   final EdgeInsetsGeometry? padding;
+  final double? loadingSize;
   
   const PrimaryButton({
     super.key,
@@ -115,6 +117,7 @@ class PrimaryButton extends StatelessWidget {
     this.height,
     this.icon,
     this.padding,
+    this.loadingSize,
   });
 
   @override
@@ -129,6 +132,7 @@ class PrimaryButton extends StatelessWidget {
       height: height,
       icon: icon,
       padding: padding,
+      loadingSize: loadingSize,
     );
   }
 }
@@ -141,6 +145,7 @@ class SecondaryButton extends StatelessWidget {
   final double? height;
   final IconData? icon;
   final EdgeInsetsGeometry? padding;
+  final double? loadingSize;
   
   const SecondaryButton({
     super.key,
@@ -151,6 +156,7 @@ class SecondaryButton extends StatelessWidget {
     this.height,
     this.icon,
     this.padding,
+    this.loadingSize,
   });
 
   @override
@@ -165,6 +171,7 @@ class SecondaryButton extends StatelessWidget {
       height: height,
       icon: icon,
       padding: padding,
+      loadingSize: loadingSize,
     );
   }
 }
@@ -179,6 +186,7 @@ class OutlinedButton extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Color? borderColor;
   final Color? textColor;
+  final double? loadingSize;
   
   const OutlinedButton({
     super.key,
@@ -191,6 +199,7 @@ class OutlinedButton extends StatelessWidget {
     this.padding,
     this.borderColor,
     this.textColor,
+    this.loadingSize,
   });
 
   @override
@@ -207,6 +216,7 @@ class OutlinedButton extends StatelessWidget {
       icon: icon,
       isOutlined: true,
       padding: padding,
+      loadingSize: loadingSize,
     );
   }
 }
@@ -219,6 +229,7 @@ class DangerButton extends StatelessWidget {
   final double? height;
   final IconData? icon;
   final EdgeInsetsGeometry? padding;
+  final double? loadingSize;
   
   const DangerButton({
     super.key,
@@ -229,6 +240,7 @@ class DangerButton extends StatelessWidget {
     this.height,
     this.icon,
     this.padding,
+    this.loadingSize,
   });
 
   @override
@@ -243,6 +255,7 @@ class DangerButton extends StatelessWidget {
       height: height,
       icon: icon,
       padding: padding,
+      loadingSize: loadingSize,
     );
   }
 }

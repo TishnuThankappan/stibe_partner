@@ -14,6 +14,7 @@ import 'package:stibe_partner/screens/salons/add_salon_screen.dart';
 import 'package:stibe_partner/screens/services/services_screen.dart';
 import 'package:stibe_partner/screens/services/service_detail_screen.dart';
 import 'package:stibe_partner/screens/services/add_service_screen.dart';
+import 'package:stibe_partner/widgets/loading_indicator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -114,7 +115,9 @@ class AuthenticationWrapper extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(
+                  LoadingIndicator(
+                    type: LoadingIndicatorType.google,
+                    size: 56.0,
                     color: AppColors.primary,
                   ),
                   const SizedBox(height: 16),

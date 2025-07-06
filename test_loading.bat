@@ -1,0 +1,3 @@
+@echo off
+echo Starting Loading Indicator Test App...
+flutter run -t lib/loading_test_main.dart

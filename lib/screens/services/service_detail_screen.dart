@@ -6,6 +6,7 @@ import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/api/enhanced_service_management_service.dart';
 import 'package:stibe_partner/utils/image_utils.dart';
+import 'package:stibe_partner/widgets/loading_indicator.dart';
 
 class ServiceDetailScreen extends StatefulWidget {
   final ServiceDto service;
@@ -472,7 +473,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: LoadingIndicator.googleLoader())
           : Column(
               children: [
                 // Service Header
@@ -722,20 +723,19 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
                     style: const TextStyle(fontSize: 14, height: 1.5),
                   ),
                 ],
+
               ),
             ),
             const SizedBox(height: 16),
           ],
           
           // Products Used
-          if (_currentService.productsUsed != null && _currentService.productsUsed!.isNotEmpty) ...[
+          if ((_currentService.products != null && _currentService.products!.isNotEmpty) ||
+              (_currentService.productsUsed != null && _currentService.productsUsed!.isNotEmpty)) ...[
             _buildInfoCard(
               title: 'Products Used',
               icon: Icons.inventory_2_outlined,
-              content: Text(
-                _currentService.productsUsed!,
-                style: const TextStyle(fontSize: 14, height: 1.5),
-              ),
+              content: _buildProductsSection(),
             ),
             const SizedBox(height: 16),
           ],
@@ -1150,37 +1150,61 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
                 ),
               ),
             ),
-            // Delete button (positioned after fullscreen to be on top)
+            // Delete button - improved for better UX
             Positioned(
-              top: 8,
-              right: 8,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => _removeGalleryImage(index),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+              top: 6,
+              right: 6,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                    padding: const EdgeInsets.all(8),
-                    child: const Icon(
-                      Icons.delete,
-                      color: Colors.white,
-                      size: 18,
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => _removeGalleryImage(index),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
+            
+            // Image index indicator (helps with organization)
+            if ((_currentService.serviceImages?.length ?? 0) > 1)
+              Positioned(
+                bottom: 6,
+                left: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -1192,6 +1216,15 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
       final List<XFile> images = await _picker.pickMultiImage();
       
       if (images.isNotEmpty && mounted) {
+        // Show immediate feedback
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Uploading ${images.length} image${images.length > 1 ? 's' : ''}...'),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
         setState(() {
           _isLoading = true;
         });
@@ -1223,8 +1256,19 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${images.length} images added to gallery'),
+                content: Text('${images.length} image${images.length > 1 ? 's' : ''} added successfully!'),
                 backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+                action: SnackBarAction(
+                  label: 'View',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    // Scroll to gallery section or switch to gallery tab
+                    if (_tabController.index != 1) {
+                      _tabController.animateTo(1);
+                    }
+                  },
+                ),
               ),
             );
           }
@@ -1238,6 +1282,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
               SnackBar(
                 content: Text('Error uploading images: ${e.toString()}'),
                 backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
               ),
             );
           }
@@ -1256,41 +1301,9 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
   }
 
   Future<void> _removeGalleryImage(int index) async {
-    // Add haptic feedback
-    HapticFeedback.mediumImpact();
+    // Add haptic feedback for immediate user response
+    HapticFeedback.lightImpact();
     
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Remove Image'),
-          ],
-        ),
-        content: const Text(
-          'Are you sure you want to remove this image from the gallery? This action cannot be undone.'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
     setState(() {
       _isLoading = true;
     });
@@ -1298,6 +1311,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
     try {
       final currentImages = _currentService.serviceImages ?? [];
       if (index < currentImages.length) {
+        final removedImageUrl = currentImages[index];
         final updatedImages = List<String>.from(currentImages);
         updatedImages.removeAt(index);
 
@@ -1315,10 +1329,17 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
         });
 
         if (mounted) {
+          // Show success with undo option
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image removed from gallery'),
+            SnackBar(
+              content: const Text('Image removed from gallery'),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Undo',
+                textColor: Colors.white,
+                onPressed: () => _undoImageRemoval(removedImageUrl, index),
+              ),
             ),
           );
         }
@@ -1332,6 +1353,61 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error removing image: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Method to undo image removal
+  Future<void> _undoImageRemoval(String imageUrl, int originalIndex) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final currentImages = _currentService.serviceImages ?? [];
+      final updatedImages = List<String>.from(currentImages);
+      
+      // Insert the image back at its original position or at the end if index is out of bounds
+      if (originalIndex <= updatedImages.length) {
+        updatedImages.insert(originalIndex, imageUrl);
+      } else {
+        updatedImages.add(imageUrl);
+      }
+
+      final updatedService = await _serviceService.updateService(
+        widget.salonId,
+        UpdateServiceRequest(
+          id: _currentService.id,
+          serviceImages: updatedImages,
+        ),
+      );
+
+      setState(() {
+        _currentService = updatedService;
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image restored to gallery'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error restoring image: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1628,6 +1704,1052 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> with SingleTi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update setting: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildProductsSection() {
+    // Check if we have structured products with images
+    if (_currentService.products != null && _currentService.products!.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Add Product button
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: OutlinedButton.icon(
+              onPressed: _addNewProduct,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Product'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+          ),
+          // Existing products
+          ...(_currentService.products!.map((product) => _buildProductCard(product)).toList()),
+        ],
+      );
+    } 
+    // Fallback to legacy text format
+    else if (_currentService.productsUsed != null && _currentService.productsUsed!.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _currentService.productsUsed!,
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+          const SizedBox(height: 12),
+          // Add Product button for legacy format conversion
+          OutlinedButton.icon(
+            onPressed: _addNewProduct,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Product'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: BorderSide(color: AppColors.primary),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+          ),
+        ],
+      );
+    }
+    
+    // No products case
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'No products specified',
+          style: TextStyle(fontSize: 14, color: Colors.grey),
+        ),
+        const SizedBox(height: 12),
+        // Add Product button
+        OutlinedButton.icon(
+          onPressed: _addNewProduct,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add Product'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: BorderSide(color: AppColors.primary),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductCard(ServiceProductDto product) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Product name, description, and edit button
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (product.description != null && product.description!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        product.description!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // Action buttons
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Edit button
+                  IconButton(
+                    onPressed: () => _editProduct(product),
+                    icon: const Icon(Icons.edit_outlined),
+                    iconSize: 18,
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Delete button
+                  IconButton(
+                    onPressed: () => _deleteProduct(product),
+                    icon: const Icon(Icons.delete_outline),
+                    iconSize: 18,
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.red,
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          
+          // Product images
+          if (product.imageUrls.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: product.imageUrls.length,
+                itemBuilder: (context, index) {
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => _viewImageFullScreen(product.imageUrls[index]),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(
+                          product.imageUrls[index],
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              width: 80,
+                              height: 80,
+                              color: Colors.grey.shade200,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 80,
+                              height: 80,
+                              color: Colors.grey.shade200,
+                              child: Icon(
+                                Icons.broken_image,
+                                color: Colors.grey.shade400,
+                                size: 24,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Method to edit a product (update name, description, and images)
+  Future<void> _editProduct(ServiceProductDto product) async {
+    final nameController = TextEditingController(text: product.name);
+    final descriptionController = TextEditingController(text: product.description ?? '');
+    List<String> updatedImageUrls = List.from(product.imageUrls);
+    List<File> newLocalImages = [];
+    bool hasChanges = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.edit_outlined, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Edit Product'),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Product name
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Product Name',
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter product name',
+                    ),
+                    onChanged: (value) => hasChanges = true,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Product description
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Description (Optional)',
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter product description',
+                    ),
+                    maxLines: 3,
+                    onChanged: (value) => hasChanges = true,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Current images
+                  if (updatedImageUrls.isNotEmpty || newLocalImages.isNotEmpty) ...[
+                    const Text(
+                      'Product Images:',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Image grid
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        // Existing images
+                        ...updatedImageUrls.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final imageUrl = entry.value;
+                          return Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  imageUrl,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 80,
+                                      height: 80,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(Icons.broken_image),
+                                    );
+                                  },
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      updatedImageUrls.removeAt(index);
+                                      hasChanges = true;
+                                    });
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.8),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    padding: const EdgeInsets.all(4),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                        
+                        // New local images
+                        ...newLocalImages.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final file = entry.value;
+                          return Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  file,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      newLocalImages.removeAt(index);
+                                      hasChanges = true;
+                                    });
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.8),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    padding: const EdgeInsets.all(4),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                        
+                        // Add image button
+                        GestureDetector(
+                          onTap: () async {
+                            try {
+                              final List<XFile> images = await _picker.pickMultiImage();
+                              if (images.isNotEmpty) {
+                                setDialogState(() {
+                                  newLocalImages.addAll(
+                                    images.map((img) => File(img.path)).toList(),
+                                  );
+                                  hasChanges = true;
+                                });
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error picking images: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  color: Colors.grey.shade600,
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Add',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    // No images - show add button
+                    const Text(
+                      'Product Images:',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () async {
+                        try {
+                          final List<XFile> images = await _picker.pickMultiImage();
+                          if (images.isNotEmpty) {
+                            setDialogState(() {
+                              newLocalImages.addAll(
+                                images.map((img) => File(img.path)).toList(),
+                              );
+                              hasChanges = true;
+                            });
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error picking images: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate,
+                              color: Colors.grey.shade600,
+                              size: 32,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Add Product Images',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: hasChanges || nameController.text.trim() != product.name || 
+                        descriptionController.text.trim() != (product.description ?? '')
+                  ? () async {
+                      await _saveProductChanges(
+                        product,
+                        nameController.text.trim(),
+                        descriptionController.text.trim(),
+                        updatedImageUrls,
+                        newLocalImages,
+                      );
+                      if (mounted) Navigator.of(context).pop();
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Save product changes
+  Future<void> _saveProductChanges(
+    ServiceProductDto originalProduct,
+    String newName,
+    String newDescription,
+    List<String> updatedImageUrls,
+    List<File> newLocalImages,
+  ) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Upload new local images if any
+      List<String> uploadedImageUrls = [];
+      if (newLocalImages.isNotEmpty) {
+        try {
+          uploadedImageUrls = await _serviceService.uploadProductImages(
+            widget.salonId,
+            newLocalImages,
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to upload images: $e'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      }
+
+      // Combine existing and new image URLs
+      final allImageUrls = [...updatedImageUrls, ...uploadedImageUrls];
+
+      // Find the product in the current service's products list and update it
+      final currentProducts = _currentService.products ?? [];
+      final updatedProducts = currentProducts.map((p) {
+        if (p.id == originalProduct.id) {
+          return ServiceProductDto(
+            id: p.id,
+            name: newName.isNotEmpty ? newName : p.name,
+            description: newDescription.isNotEmpty ? newDescription : null,
+            imageUrls: allImageUrls,
+            isUploaded: true,
+          );
+        }
+        return p;
+      }).toList();
+
+      // Update the service with the modified products
+      final updateRequest = UpdateServiceRequest(
+        id: _currentService.id,
+        products: updatedProducts,
+      );
+
+      final updatedService = await _serviceService.updateService(
+        widget.salonId,
+        updateRequest,
+      );
+
+      setState(() {
+        _currentService = updatedService;
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Product updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update product: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Add a new product to the service
+  Future<void> _addNewProduct() async {
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    List<File> selectedImages = [];
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.add_box_outlined, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Add New Product'),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Product name
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Product Name *',
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter product name',
+                    ),
+                    autofocus: true,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Product description
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Description (Optional)',
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter product description',
+                    ),
+                    maxLines: 3,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Product images
+                  const Text(
+                    'Product Images:',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  if (selectedImages.isNotEmpty) ...[
+                    // Image grid
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        // Selected images
+                        ...selectedImages.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final file = entry.value;
+                          return Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  file,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      selectedImages.removeAt(index);
+                                    });
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.8),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    padding: const EdgeInsets.all(4),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                        
+                        // Add image button
+                        GestureDetector(
+                          onTap: () async {
+                            try {
+                              final List<XFile> images = await _picker.pickMultiImage();
+                              if (images.isNotEmpty) {
+                                setDialogState(() {
+                                  selectedImages.addAll(
+                                    images.map((img) => File(img.path)).toList(),
+                                  );
+                                });
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error picking images: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  color: Colors.grey.shade600,
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Add',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    // No images - show add button
+                    GestureDetector(
+                      onTap: () async {
+                        try {
+                          final List<XFile> images = await _picker.pickMultiImage();
+                          if (images.isNotEmpty) {
+                            setDialogState(() {
+                              selectedImages.addAll(
+                                images.map((img) => File(img.path)).toList(),
+                              );
+                            });
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error picking images: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate,
+                              color: Colors.grey.shade600,
+                              size: 32,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Add Product Images',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: nameController.text.trim().isNotEmpty
+                  ? () async {
+                      await _saveNewProduct(
+                        nameController.text.trim(),
+                        descriptionController.text.trim(),
+                        selectedImages,
+                      );
+                      if (mounted) Navigator.of(context).pop();
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
+              child: const Text('Add Product'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Save new product
+  Future<void> _saveNewProduct(
+    String name,
+    String description,
+    List<File> images,
+  ) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Upload images if any
+      List<String> uploadedImageUrls = [];
+      if (images.isNotEmpty) {
+        try {
+          uploadedImageUrls = await _serviceService.uploadProductImages(
+            widget.salonId,
+            images,
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to upload images: $e'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      }
+
+      // Create new product
+      final newProduct = ServiceProductDto(
+        id: DateTime.now().millisecondsSinceEpoch.toString(), // Generate unique ID
+        name: name,
+        description: description.isNotEmpty ? description : null,
+        imageUrls: uploadedImageUrls,
+        isUploaded: true,
+      );
+
+      // Add to existing products list
+      final currentProducts = _currentService.products ?? [];
+      final updatedProducts = [...currentProducts, newProduct];
+
+      // Update the service with the new products
+      final updateRequest = UpdateServiceRequest(
+        id: _currentService.id,
+        products: updatedProducts,
+      );
+
+      final updatedService = await _serviceService.updateService(
+        widget.salonId,
+        updateRequest,
+      );
+
+      setState(() {
+        _currentService = updatedService;
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Product "$name" added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add product: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Delete a product from the service
+  Future<void> _deleteProduct(ServiceProductDto product) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Delete Product'),
+          ],
+        ),
+        content: RichText(
+          text: TextSpan(
+            style: DefaultTextStyle.of(context).style,
+            children: [
+              const TextSpan(text: 'Are you sure you want to delete "'),
+              TextSpan(
+                text: product.name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const TextSpan(text: '"? This action cannot be undone.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Remove product from the list
+      final currentProducts = _currentService.products ?? [];
+      final updatedProducts = currentProducts
+          .where((p) => p.id != product.id)
+          .toList();
+
+      // Update the service with the modified products
+      final updateRequest = UpdateServiceRequest(
+        id: _currentService.id,
+        products: updatedProducts,
+      );
+
+      final updatedService = await _serviceService.updateService(
+        widget.salonId,
+        updateRequest,
+      );
+
+      setState(() {
+        _currentService = updatedService;
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Product "${product.name}" deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete product: $e'),
             backgroundColor: Colors.red,
           ),
         );

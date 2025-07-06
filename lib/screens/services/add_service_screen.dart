@@ -4,8 +4,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
 import 'package:stibe_partner/widgets/app_text_field.dart';
+import 'package:stibe_partner/widgets/product_management_widget.dart';
 import 'package:stibe_partner/api/enhanced_service_management_service.dart';
 import 'package:stibe_partner/screens/services/manage_categories_screen.dart';
+import 'package:stibe_partner/models/service_product.dart';
 
 class AddServiceScreen extends StatefulWidget {
   final int salonId;
@@ -33,7 +35,6 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   final _priceController = TextEditingController();
   final _offerPriceController = TextEditingController();
   final _durationController = TextEditingController();
-  final _productsUsedController = TextEditingController();
   final _maxConcurrentBookingsController = TextEditingController();
   final _bufferTimeBeforeController = TextEditingController();
   final _bufferTimeAfterController = TextEditingController();
@@ -46,6 +47,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   int? _pendingCategoryId; // Store category ID when editing before categories load
   String? _profileImageUrl;
   List<String> _galleryImages = [];
+  List<ServiceProduct> _serviceProducts = []; // Changed from simple string to product list
   List<ServiceCategoryDto> _categories = [];
   String? _errorMessage;
   bool _isCategoriesLoading = true;
@@ -76,7 +78,6 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     _priceController.dispose();
     _offerPriceController.dispose();
     _durationController.dispose();
-    _productsUsedController.dispose();
     _maxConcurrentBookingsController.dispose();
     _bufferTimeBeforeController.dispose();
     _bufferTimeAfterController.dispose();
@@ -89,7 +90,6 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     _priceController.text = service.price.toStringAsFixed(0);
     _offerPriceController.text = service.offerPrice?.toStringAsFixed(0) ?? '';
     _durationController.text = service.durationInMinutes.toString();
-    _productsUsedController.text = service.productsUsed ?? '';
     _maxConcurrentBookingsController.text = service.maxConcurrentBookings.toString();
     _bufferTimeBeforeController.text = service.bufferTimeBeforeMinutes.toString();
     _bufferTimeAfterController.text = service.bufferTimeAfterMinutes.toString();
@@ -98,6 +98,21 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     _requiresStaffAssignment = service.requiresStaffAssignment;
     _profileImageUrl = service.imageUrl;
     _galleryImages = service.serviceImages ?? [];
+    
+    // Load products from structured format first, fallback to string format for backward compatibility
+    if (service.products != null && service.products!.isNotEmpty) {
+      // Convert from ServiceProductDto to ServiceProduct
+      _serviceProducts = service.products!.map((dto) => ServiceProduct(
+        id: dto.id,
+        name: dto.name,
+        description: dto.description,
+        imageUrls: dto.imageUrls,
+        isUploaded: dto.isUploaded,
+      )).toList();
+    } else if (service.productsUsed != null && service.productsUsed!.isNotEmpty) {
+      // Fallback to legacy string format
+      _serviceProducts = ServiceProduct.productsFromString(service.productsUsed!);
+    }
     
     // Store the pending category ID to be validated when categories load
     _pendingCategoryId = service.categoryId;
@@ -324,6 +339,68 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       print('  Uploaded URLs: $uploadedGalleryUrls');
       print('  All URLs: $allGalleryUrls');
 
+      // Upload product images if any
+      if (_serviceProducts.isNotEmpty) {
+        try {
+          print('🔧 Processing product images...');
+          
+          for (int i = 0; i < _serviceProducts.length; i++) {
+            final product = _serviceProducts[i];
+            
+            // Upload new local images for this product
+            if (product.localImageFiles.isNotEmpty) {
+              try {
+                print('📤 Uploading ${product.localImageFiles.length} images for product: ${product.name}');
+                
+                // Show uploading message
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Uploading images for ${product.name}...'),
+                      backgroundColor: Colors.blue,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+                
+                final uploadedProductImageUrls = await _serviceService.uploadProductImages(
+                  widget.salonId,
+                  product.localImageFiles,
+                );
+                
+                print('✅ Product images uploaded: $uploadedProductImageUrls');
+                
+                // Update the product with uploaded URLs
+                final updatedProduct = product.copyWith(
+                  imageUrls: [...product.imageUrls, ...uploadedProductImageUrls],
+                  localImageFiles: [], // Clear local files after upload
+                  isUploaded: true,
+                );
+                
+                _serviceProducts[i] = updatedProduct;
+                
+              } catch (e) {
+                print('❌ Failed to upload images for product ${product.name}: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to upload images for ${product.name}'),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
+              }
+            }
+          }
+          
+          print('✅ Product image processing completed');
+          
+        } catch (e) {
+          print('❌ Error processing product images: $e');
+        }
+      }
+
       // Create or update service
       if (widget.service == null) {
         // Creating new service
@@ -341,8 +418,11 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           offerPrice: _offerPriceController.text.isNotEmpty 
               ? double.parse(_offerPriceController.text) 
               : null,
-          productsUsed: _productsUsedController.text.trim().isNotEmpty 
-              ? _productsUsedController.text.trim() 
+          productsUsed: _serviceProducts.isNotEmpty 
+              ? ServiceProduct.productsToString(_serviceProducts) 
+              : null,
+          products: _serviceProducts.isNotEmpty 
+              ? _serviceProducts.map((p) => ServiceProductDto.fromServiceProduct(p)).toList()
               : null,
           serviceImages: allGalleryUrls.isNotEmpty ? allGalleryUrls : null,
           tags: [],
@@ -383,8 +463,11 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           offerPrice: _offerPriceController.text.isNotEmpty 
               ? double.parse(_offerPriceController.text) 
               : null,
-          productsUsed: _productsUsedController.text.trim().isNotEmpty 
-              ? _productsUsedController.text.trim() 
+          productsUsed: _serviceProducts.isNotEmpty 
+              ? ServiceProduct.productsToString(_serviceProducts) 
+              : null,
+          products: _serviceProducts.isNotEmpty 
+              ? _serviceProducts.map((p) => ServiceProductDto.fromServiceProduct(p)).toList()
               : null,
           serviceImages: allGalleryUrls.isNotEmpty ? allGalleryUrls : null,
           tags: [],
@@ -744,14 +827,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
         
         const SizedBox(height: 16),
         
-        // Products Used
-        AppTextField(
-          controller: _productsUsedController,
-          label: 'Products Used (Optional)',
-          hintText: 'e.g., Premium hair care products, organic oils',
-          prefixIcon: const Icon(Icons.inventory),
-          maxLines: 2,
-        ),
+        // Products Used Section
+        _buildProductsSection(),
       ],
     );
   }
@@ -1283,4 +1360,18 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       ],
     );
   }
+
+  // ===================== PRODUCT MANAGEMENT SECTION =====================
+
+  Widget _buildProductsSection() {
+    return ProductManagementWidget(
+      initialProducts: _serviceProducts,
+      onProductsChanged: (List<ServiceProduct> products) {
+        setState(() {
+          _serviceProducts = products;
+        });
+      },
+    );
+  }
+
 }

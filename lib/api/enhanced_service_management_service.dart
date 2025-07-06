@@ -1,6 +1,57 @@
 import 'dart:io';
 import 'package:stibe_partner/api/api_service.dart';
 import 'package:stibe_partner/utils/image_utils.dart';
+import 'package:stibe_partner/models/service_product.dart';
+
+// Service Product DTO for structured products with images
+class ServiceProductDto {
+  final String id;
+  final String name;
+  final String? description;
+  final List<String> imageUrls;
+  final bool isUploaded;
+
+  ServiceProductDto({
+    required this.id,
+    required this.name,
+    this.description,
+    this.imageUrls = const [],
+    this.isUploaded = true,
+  });
+
+  factory ServiceProductDto.fromJson(Map<String, dynamic> json) {
+    return ServiceProductDto(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'],
+      imageUrls: json['imageUrls'] != null 
+          ? List<String>.from(json['imageUrls']).map((url) => ImageUtils.getFullImageUrl(url)).toList()
+          : [],
+      isUploaded: json['isUploaded'] ?? true,
+    );
+  }
+
+  // Convert from ServiceProduct model to DTO
+  factory ServiceProductDto.fromServiceProduct(ServiceProduct product) {
+    return ServiceProductDto(
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      imageUrls: product.imageUrls,
+      isUploaded: product.isUploaded,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'imageUrls': imageUrls,
+      'isUploaded': isUploaded,
+    };
+  }
+}
 
 // Service Category DTO
 class ServiceCategoryDto {
@@ -73,6 +124,7 @@ class ServiceDto {
   final double? offerPrice;
   final DateTime? offerExpiryDate;
   final String? productsUsed;
+  final List<ServiceProductDto>? products; // Structured products with images
   final List<String>? serviceImages;
   
   final List<String> tags;
@@ -103,6 +155,7 @@ class ServiceDto {
     this.offerPrice,
     this.offerExpiryDate,
     this.productsUsed,
+    this.products,
     this.serviceImages,
     this.tags = const [],
     this.metadata,
@@ -134,6 +187,9 @@ class ServiceDto {
       offerPrice: json['offerPrice']?.toDouble(),
       offerExpiryDate: json['offerExpiryDate'] != null ? DateTime.parse(json['offerExpiryDate']) : null,
       productsUsed: json['productsUsed'],
+      products: json['products'] != null 
+          ? (json['products'] as List).map((p) => ServiceProductDto.fromJson(p)).toList()
+          : null,
       serviceImages: json['serviceImages'] != null 
           ? List<String>.from(json['serviceImages']).map((url) => ImageUtils.getFullImageUrl(url)).toList()
           : null,
@@ -168,6 +224,7 @@ class ServiceDto {
       'offerPrice': offerPrice,
       'offerExpiryDate': offerExpiryDate?.toIso8601String(),
       'productsUsed': productsUsed,
+      'products': products?.map((p) => p.toJson()).toList(),
       'serviceImages': serviceImages,
       'tags': tags,
       'metadata': metadata,
@@ -319,6 +376,7 @@ class CreateServiceRequest {
   // Enhanced fields matching API
   final double? offerPrice;
   final String? productsUsed;
+  final List<ServiceProductDto>? products; // Structured products with images
   final List<String>? serviceImages;
   
   final List<String> tags;
@@ -339,6 +397,7 @@ class CreateServiceRequest {
     this.bufferTimeAfterMinutes = 0,
     this.offerPrice,
     this.productsUsed,
+    this.products,
     this.serviceImages,
     this.tags = const [],
     this.metadata,
@@ -360,6 +419,7 @@ class CreateServiceRequest {
       'bufferTimeAfterMinutes': bufferTimeAfterMinutes,
       'offerPrice': offerPrice,
       'productsUsed': productsUsed,
+      'products': products?.map((p) => p.toJson()).toList(),
       'serviceImages': serviceImages,
       'tags': tags,
       'metadata': metadata,
@@ -387,6 +447,7 @@ class UpdateServiceRequest {
   final double? offerPrice;
   final DateTime? offerExpiryDate;
   final String? productsUsed;
+  final List<ServiceProductDto>? products; // Structured products with images
   final List<String>? serviceImages;
   
   final List<String>? tags;
@@ -410,6 +471,7 @@ class UpdateServiceRequest {
     this.offerPrice,
     this.offerExpiryDate,
     this.productsUsed,
+    this.products,
     this.serviceImages,
     this.tags,
     this.metadata,
@@ -433,6 +495,7 @@ class UpdateServiceRequest {
     if (offerPrice != null) data['offerPrice'] = offerPrice;
     if (offerExpiryDate != null) data['offerExpiryDate'] = offerExpiryDate!.toIso8601String();
     if (productsUsed != null) data['productsUsed'] = productsUsed;
+    if (products != null) data['products'] = products!.map((p) => p.toJson()).toList();
     if (serviceImages != null) data['serviceImages'] = serviceImages;
     if (tags != null) data['tags'] = tags;
     if (metadata != null) data['metadata'] = metadata;
@@ -1124,6 +1187,103 @@ class ServiceManagementService {
     }
     
     print('✅ Uploaded ${uploadedUrls.length}/${imageFiles.length} gallery images individually');
+    return uploadedUrls;
+  }
+
+  // ===================== PRODUCT IMAGE UPLOAD =====================
+
+  // Upload product images for a service
+  Future<List<String>> uploadProductImages(int salonId, List<File> imageFiles) async {
+    print('🖼️ Uploading ${imageFiles.length} product images for salon $salonId');
+    print('📁 Image files: ${imageFiles.map((f) => f.path).toList()}');
+    
+    try {
+      final response = await _apiService.uploadFiles(
+        '/salon/$salonId/service/upload-product-images',
+        imageFiles,
+        fieldName: 'images',
+      );
+      
+      print('📥 Product images upload response: $response');
+      print('📥 Response type: ${response.runtimeType}');
+      
+      if (response != null) {
+        // Handle different response structures
+        if (response is Map<String, dynamic>) {
+          if (response['data'] != null && response['data']['imageUrls'] != null) {
+            final urls = List<String>.from(response['data']['imageUrls']);
+            print('✅ Product images uploaded successfully: $urls');
+            return urls;
+          } else if (response['imageUrls'] != null) {
+            final urls = List<String>.from(response['imageUrls']);
+            print('✅ Product images uploaded successfully (direct): $urls');
+            return urls;
+          } else if (response['data'] != null && response['data'] is List) {
+            final urls = List<String>.from(response['data']);
+            print('✅ Product images uploaded successfully (list): $urls');
+            return urls;
+          }
+        } else if (response is List) {
+          final urls = List<String>.from(response);
+          print('✅ Product images uploaded successfully (raw list): $urls');
+          return urls;
+        }
+      }
+      
+      // Check if the response indicates an error
+      if (response != null && response['message'] != null) {
+        throw Exception(response['message']);
+      }
+      
+      throw Exception('Failed to upload product images: No URLs returned. Response: $response');
+    } catch (e) {
+      print('❌ Error uploading product images: $e');
+      
+      // Try fallback method for 404 or if endpoint doesn't exist
+      if (e.toString().contains('404') || e.toString().contains('Not Found')) {
+        print('🔄 Product upload endpoint not found. Trying fallback method...');
+        try {
+          return await uploadProductImagesIndividually(salonId, imageFiles);
+        } catch (fallbackError) {
+          print('❌ Fallback method also failed: $fallbackError');
+          throw Exception('Failed to upload product images using both methods: $fallbackError');
+        }
+      }
+      
+      // Re-throw with more specific error information
+      if (e.toString().contains('401')) {
+        throw Exception('Authentication failed. Please log in again.');
+      } else if (e.toString().contains('403')) {
+        throw Exception('You don\'t have permission to upload images for this salon.');
+      } else if (e.toString().contains('400')) {
+        throw Exception('Invalid image files. Please select valid JPG, PNG, GIF, or WebP images under 5MB each (max 10 images).');
+      } else if (e.toString().contains('500')) {
+        throw Exception('Server error. Please try again later.');
+      }
+      
+      throw Exception('Failed to upload product images: ${e.toString()}');
+    }
+  }
+
+  // Fallback method: Upload product images one by one using profile image endpoint
+  Future<List<String>> uploadProductImagesIndividually(int salonId, List<File> imageFiles) async {
+    print('🖼️ Fallback: Uploading ${imageFiles.length} product images individually for salon $salonId');
+    
+    final List<String> uploadedUrls = [];
+    
+    for (int i = 0; i < imageFiles.length; i++) {
+      try {
+        print('📷 Uploading product image ${i + 1}/${imageFiles.length}: ${imageFiles[i].path}');
+        final url = await uploadServiceProfileImage(salonId, imageFiles[i]);
+        uploadedUrls.add(url);
+        print('✅ Product image ${i + 1} uploaded: $url');
+      } catch (e) {
+        print('❌ Failed to upload product image ${i + 1}: $e');
+        // Continue with other images even if one fails
+      }
+    }
+    
+    print('✅ Uploaded ${uploadedUrls.length}/${imageFiles.length} product images individually');
     return uploadedUrls;
   }
 }

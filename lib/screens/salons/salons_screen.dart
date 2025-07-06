@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
 
 import 'package:stibe_partner/screens/salons/add_salon_screen.dart';
+import 'package:stibe_partner/screens/salons/edit_salon_screen.dart';
 import 'package:stibe_partner/screens/salons/salon_detail_screen_new.dart';
 import 'package:stibe_partner/screens/salons/salon_image_preview_screen.dart';
 import 'package:stibe_partner/widgets/custom_app_bar.dart';
@@ -690,7 +691,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => SalonDetailScreen(salon: salon.toJson()),
+                    builder: (context) => EditSalonScreen(salon: salon),
                   ),
                 ).then((_) => _refreshSalons());
               },

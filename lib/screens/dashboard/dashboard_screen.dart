@@ -10,6 +10,7 @@ import 'package:stibe_partner/screens/dashboard/widgets/summary_section.dart';
 import 'package:stibe_partner/screens/dashboard/widgets/appointments_section.dart';
 import 'package:stibe_partner/screens/dashboard/widgets/activity_section.dart';
 import 'package:stibe_partner/screens/dashboard/widgets/profile_drawer.dart';
+import 'package:stibe_partner/widgets/loading_indicator.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -55,9 +56,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
+        ? Center(
+            child: LoadingIndicator.googleLoader(
+              size: 56.0,
+              message: 'Preparing your dashboard...',
+              color: AppColors.primary,
+            ),
+          )
         : RefreshIndicator(
             onRefresh: _refreshDashboard,
+            color: AppColors.primary,
+            backgroundColor: Colors.white,
             child: SafeArea(
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),

@@ -248,6 +248,7 @@ class CreateSalonRequest {
   final bool useCurrentLocation;
   final List<String>? imageUrls; // Add image URLs
   final String? profilePictureUrl; // Profile picture URL
+  final String? website; // Business website URL
 
   CreateSalonRequest({
     required this.name,
@@ -266,6 +267,7 @@ class CreateSalonRequest {
     this.useCurrentLocation = false,
     this.imageUrls, // Add to constructor
     this.profilePictureUrl,
+    this.website,
   });
   Map<String, dynamic> toJson() {
     return {
@@ -285,6 +287,7 @@ class CreateSalonRequest {
       'useCurrentLocation': useCurrentLocation,
       'imageUrls': imageUrls, // Add image URLs to JSON
       'profilePictureUrl': profilePictureUrl,
+      'website': website,
     };
   }
 }

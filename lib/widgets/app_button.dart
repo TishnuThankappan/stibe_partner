@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:stibe_partner/constants/app_theme.dart';
+import 'package:stibe_partner/widgets/loading_indicator.dart';
 
 class AppButton extends StatelessWidget {
   final String text;
@@ -25,7 +26,6 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     
     Widget buttonContent = Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -39,11 +39,8 @@ class AppButton extends StatelessWidget {
             width: 20,
             height: 20,
             margin: const EdgeInsets.only(right: 12),
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                isOutlined ? AppColors.primary : Colors.white,
-              ),
+            child: LoadingIndicator.button(
+              color: isOutlined ? AppColors.primary : Colors.white,
             ),
           ),
         Text(

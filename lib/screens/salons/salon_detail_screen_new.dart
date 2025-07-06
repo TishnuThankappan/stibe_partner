@@ -110,8 +110,9 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> with SingleTicker
   }
 
   Widget _buildStaffTab() {
-    return const Center(
-      child: Text('Staff content...'),
+    return StaffManagementScreen(
+      salonId: _currentSalon['id'],
+      salonName: _currentSalon['name'],
     );
   }
 

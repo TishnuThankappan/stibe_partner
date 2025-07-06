@@ -5,6 +5,7 @@ import 'package:stibe_partner/providers/auth_provider.dart';
 import 'package:stibe_partner/screens/auth/forgot_password_screen.dart';
 import 'package:stibe_partner/widgets/custom_button.dart';
 import 'package:stibe_partner/widgets/custom_text_field.dart';
+import 'package:stibe_partner/widgets/loading_indicator.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onNavigateToRegister;
@@ -302,11 +303,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
                   
                   // Login button
-                  PrimaryButton(
-                    text: 'Login',
-                    onPressed: _login,
-                    isLoading: authProvider.isLoading,
-                  ),
+                  authProvider.isLoading
+                    ? Column(
+                        children: [
+                          LoadingIndicator(
+                            type: LoadingIndicatorType.google,
+                            size: 40.0, 
+                            color: AppColors.primary,
+                            message: 'Signing you in...',
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      )
+                    : PrimaryButton(
+                        text: 'Login',
+                        onPressed: _login,
+                        loadingSize: 24.0,
+                      ),
                   
                   // Debug button - will be removed in production
                   if (AppConfig.isDevelopment) ...[
