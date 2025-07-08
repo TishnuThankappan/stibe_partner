@@ -36,7 +36,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }  Future<void> _register() async {
+  }  
+  
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
       if (!_acceptTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
