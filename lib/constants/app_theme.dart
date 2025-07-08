@@ -303,9 +303,9 @@ class AppConfig {
   static String get baseUrl {
     switch (currentEnvironment) {
       case Environment.development:
-        return 'http://10.232.28.23:5074/api';  // Using localhost for local development
+        return 'http://192.168.1.90:5074/api';  // Using localhost for local development
       case Environment.production:
-        return 'http://10.232.28.23:5074/api';  // Production URL
+        return 'http://192.168.1.90:5074/api';  // Production URL
     }
   }
   
